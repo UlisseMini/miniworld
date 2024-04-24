@@ -25,6 +25,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "725ed200-a849-4562-8b9c-b64da0b4a806"
+      }
+    },
+    "owner": "ulirocks"
   }
 }
