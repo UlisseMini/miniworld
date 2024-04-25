@@ -6,13 +6,23 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "ts:check": "tsc"
   },
   "dependencies": {
+    "@types/react": "~18.2.45",
+    "axios": "^1.6.8",
     "expo": "~50.0.14",
+    "expo-auth-session": "~5.4.0",
+    "expo-crypto": "~12.8.1",
+    "expo-location": "~16.5.5",
     "expo-status-bar": "~1.11.1",
+    "expo-task-manager": "~11.7.3",
     "react": "18.2.0",
-    "react-native": "0.73.6"
+    "react-native": "0.73.6",
+    "react-native-maps": "1.10.0",
+    "typescript": "^5.3.0",
+    "@react-native-async-storage/async-storage": "1.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
