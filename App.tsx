@@ -11,6 +11,7 @@ import * as AuthSession from "expo-auth-session";
 // WebBrowser.maybeCompleteAuthSession(); // web only; on mobile does nothing
 
 const LOCATION_TASK_NAME = "background-location-task";
+const HOST = "https://loc.uli.rocks";
 
 const requestPermissions = async () => {
   const { status: foregroundStatus } =
@@ -21,7 +22,7 @@ const requestPermissions = async () => {
     if (backgroundStatus === "granted") {
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         // accuracy: Location.Accuracy.Lowest, // PRIVACY. TODO: BETTER SOLUTION
-        accuracy: Location.Accuracy.Highest, // PRIVACY. TODO: BETTER SOLUTION
+        accuracy: Location.Accuracy.Highest,
       });
       return true;
     }
@@ -54,7 +55,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
       // update the server
       axios
-        .post("https://loc.uli.rocks/update", user)
+        .post(`${HOST}/update`, user)
         .then((response) => console.log("updated server:", response.status))
         .catch((error) => console.error("update error:", error));
     })();
@@ -77,7 +78,6 @@ export default function LoginScreen() {
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: "1232840493696680038",
-      // clientSecret: "SAKFNEqlBWZLRPqit5uv_dy-6pKHd7Cr", // PURELY FOR TESTING.
       redirectUri: AuthSession.makeRedirectUri({
         scheme: "com.ulirocks.locshare",
         path: "redirect",
@@ -93,12 +93,23 @@ export default function LoginScreen() {
   }, [request]);
 
   useEffect(() => {
-    if (!response) return;
     if (response?.type === "success") {
       const { code } = response.params;
       console.log("code", code);
-    } else {
-      console.error("response", response);
+      // attempt to get discord token
+
+      // TODO: There's probably a better way of doing this.
+      axios
+        .post(`${HOST}/get_discord_token`, {
+          code: code,
+          code_verifier: request.codeVerifier,
+        })
+        .then((response) => {
+          console.log("discord token response", response.data);
+        })
+        .catch((error) => {
+          console.error("error", error);
+        });
     }
   }, [response]);
 
@@ -179,7 +190,7 @@ function App() {
   useEffect(() => {
     const updateUsers = () => {
       axios
-        .get("https://loc.uli.rocks/users")
+        .get(`${HOST}/users`)
         .then((response) => {
           const change =
             JSON.stringify(users) !== JSON.stringify(response.data);

@@ -1,6 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
+
+import httpx
+import os
+
+load_dotenv()
+
+DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
+DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
 
 app = FastAPI()
 
@@ -38,6 +47,27 @@ def update(user: User):
 
     return {"status": "ok"}
 
+
+
+class GetTokenRequest(BaseModel):
+    code: str
+    code_verifier: str
+
+
+@app.post("/get_discord_token")
+def get_discord_token(request: GetTokenRequest):
+    # given code from oauth2
+    resp = httpx.post("https://discord.com/api/oauth2/token", data={
+        "client_id": DISCORD_CLIENT_ID,
+        "client_secret": DISCORD_CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": request.code,
+        "redirect_uri": "com.ulirocks.locshare://redirect",
+        "scope": "identify guilds",
+        "code_verifier": request.code_verifier,
+    })
+    body = resp.json()
+    return body
 
 
 @app.get("/users")

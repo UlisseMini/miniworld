@@ -36,3 +36,4 @@ yarn-error.*
 
 # backend
 __pycache__
+.env
