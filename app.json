@@ -4,6 +4,7 @@
     "slug": "locshare",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "com.ulirocks.locshare",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {

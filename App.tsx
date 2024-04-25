@@ -6,6 +6,9 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as AuthSession from "expo-auth-session";
+
+// WebBrowser.maybeCompleteAuthSession(); // web only; on mobile does nothing
 
 const LOCATION_TASK_NAME = "background-location-task";
 
@@ -63,7 +66,55 @@ type User = {
   location: Location.LocationObject;
 };
 
+const discovery = {
+  authorizationEndpoint: "https://discord.com/api/oauth2/authorize",
+  tokenEndpoint: "https://discord.com/api/oauth2/token",
+  revocationEndpoint: "https://discord.com/api/oauth2/token/revoke",
+};
+
 export default function LoginScreen() {
+  console.log("login screen render");
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: "1232840493696680038",
+      // clientSecret: "SAKFNEqlBWZLRPqit5uv_dy-6pKHd7Cr", // PURELY FOR TESTING.
+      redirectUri: AuthSession.makeRedirectUri({
+        scheme: "com.ulirocks.locshare",
+        path: "redirect",
+      }),
+      usePKCE: true,
+      scopes: ["identify", "guilds"],
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    console.log("request object", request);
+  }, [request]);
+
+  useEffect(() => {
+    if (!response) return;
+    if (response?.type === "success") {
+      const { code } = response.params;
+      console.log("code", code);
+    } else {
+      console.error("response", response);
+    }
+  }, [response]);
+
+  return (
+    <View style={styles.container}>
+      <Button
+        disabled={!request}
+        title="Login with discord"
+        onPress={() => {
+          // showInRecents: true is required for 2fa on android
+          promptAsync({ showInRecents: true });
+        }}
+      />
+    </View>
+  );
+
   const [username, setUsername] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
 
