@@ -16,14 +16,20 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ulirocks.locshare"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ulirocks.locshare"
+      "package": "com.ulirocks.locshare",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +39,16 @@
         "projectId": "725ed200-a849-4562-8b9c-b64da0b4a806"
       }
     },
-    "owner": "ulirocks"
+    "owner": "ulirocks",
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
   }
 }

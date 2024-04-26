@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import MapView, { Marker } from "react-native-maps";
-import { StyleSheet, Button, TextInput, View } from "react-native";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import { StyleSheet, Button, Text, View } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
+import { Image } from "expo-image";
 
 // WebBrowser.maybeCompleteAuthSession(); // web only; on mobile does nothing
 
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
 
-const requestPermissions = async () => {
+const requestLocationPermissions = async () => {
   const { status: foregroundStatus } =
     await Location.requestForegroundPermissionsAsync();
   if (foregroundStatus === "granted") {
@@ -30,6 +31,30 @@ const requestPermissions = async () => {
   return false;
 };
 
+const updateServer = async (locations: Location.LocationObject[]) => {
+  const location = locations[0];
+
+  console.log("Received new location", location);
+  // update the server
+  const session = JSON.parse(await AsyncStorage.getItem("session"));
+  console.log("Using session", session);
+  if (!session) {
+    console.error("No session found. Cannot update server!");
+    return;
+  }
+
+  axios
+    .post(`${HOST}/update`, location, {
+      headers: {
+        Authorization: `${session}`,
+      },
+    })
+    .then((response) => console.log("updated server:", response.status))
+    .catch((error) =>
+      console.error("update error:", error, "more:", error.response.data)
+    );
+};
+
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
     console.error(error);
@@ -38,32 +63,13 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
   const locations = (data as any).locations;
   if (locations) {
-    console.log("Received new locations", locations);
-    (async () => {
-      // update user info in local storage
-      const user: User = JSON.parse(await AsyncStorage.getItem("user"));
-      await AsyncStorage.setItem(
-        "user",
-        JSON.stringify({ ...user, location: locations[0] })
-      );
-      console.log("updated user in storage", user);
-
-      if (user.name === "") {
-        console.error("update: no username set");
-        return;
-      }
-
-      // update the server
-      axios
-        .post(`${HOST}/update`, user)
-        .then((response) => console.log("updated server:", response.status))
-        .catch((error) => console.error("update error:", error));
-    })();
+    updateServer(locations);
   }
 });
 
 type User = {
   name: string;
+  avatar: string;
   location: Location.LocationObject;
 };
 
@@ -73,8 +79,40 @@ const discovery = {
   revocationEndpoint: "https://discord.com/api/oauth2/token/revoke",
 };
 
+// useState but for an async store
+function useStore<T>(
+  key: string,
+  init: T,
+  override?: boolean
+): [T | null, any] {
+  const [state, setState] = useState<T | null>(init);
+
+  useEffect(() => {
+    (async () => {
+      if (override) await AsyncStorage.removeItem(key);
+
+      const item = await AsyncStorage.getItem(key);
+      if (item) {
+        console.log(`loading ${key} -> ${item}`);
+        setState(JSON.parse(item));
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!state) return; // FIXME: Stupid hack
+    (async () => {
+      console.log(`setting ${key} -> ${state}`);
+      await AsyncStorage.setItem(key, JSON.stringify(state));
+      console.log(`set ${key} -> ${state}`);
+    })();
+  }, [state]);
+
+  return [state, setState];
+}
+
 export default function LoginScreen() {
-  console.log("login screen render");
+  const [session, setSession] = useStore<string>("session", null);
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: "1232840493696680038",
@@ -88,122 +126,111 @@ export default function LoginScreen() {
     discovery
   );
 
-  useEffect(() => {
-    console.log("request object", request);
-  }, [request]);
-
+  // exchange discord code for session once we have it
   useEffect(() => {
     if (response?.type === "success") {
       const { code } = response.params;
       console.log("code", code);
-      // attempt to get discord token
 
-      // TODO: There's probably a better way of doing this.
       axios
-        .post(`${HOST}/get_discord_token`, {
+        .post(`${HOST}/login/discord`, {
           code: code,
           code_verifier: request.codeVerifier,
         })
-        .then((response) => {
-          console.log("discord token response", response.data);
-        })
-        .catch((error) => {
-          console.error("error", error);
-        });
+        .then((response) => setSession(response.data.session))
+        .catch((error) => console.error("login:", error));
     }
   }, [response]);
 
-  return (
-    <View style={styles.container}>
-      <Button
-        disabled={!request}
-        title="Login with discord"
-        onPress={() => {
-          // showInRecents: true is required for 2fa on android
-          promptAsync({ showInRecents: true });
-        }}
-      />
-    </View>
-  );
-
-  const [username, setUsername] = useState("");
-  const [loggedIn, setLoggedIn] = useState(false);
-
-  // see if we're already logged in
-  useEffect(() => {
-    (async () => {
-      const user = await AsyncStorage.getItem("user");
-      const taskStarted = await Location.hasStartedLocationUpdatesAsync(
-        LOCATION_TASK_NAME
-      );
-
-      if (user && taskStarted) {
-        setLoggedIn(true);
-      }
-    })();
-  }, []);
-
-  if (loggedIn) {
-    return <App />;
-  } else {
+  if (!session) {
     return (
       <View style={styles.container}>
-        <TextInput
-          placeholder="Username"
-          onChange={(e) => {
-            setUsername(e.nativeEvent.text);
-          }}
-        />
-
         <Button
-          title="Login"
-          onPress={async () => {
-            if (username.trim() === "") {
-              console.error("login: no username set");
-              return;
-            }
-
-            const granted = await requestPermissions();
-            if (!granted) {
-              console.error("Permissions not granted");
-              return;
-            }
-
-            const user: User = {
-              name: username,
-              location: await Location.getLastKnownPositionAsync(),
-            };
-            await AsyncStorage.setItem("user", JSON.stringify(user));
-
-            setLoggedIn(true);
+          disabled={!request}
+          title="Login with discord"
+          onPress={() => {
+            // showInRecents: true is required for 2fa on android
+            promptAsync({ showInRecents: true });
           }}
         />
       </View>
     );
+  } else {
+    return <AcquireLocation session={session} />;
   }
 }
 
-// Once we're inside App() we have username and location permissions
-function App() {
+function AcquireLocation(props: { session: string }) {
+  const [granted, setGranted] = useState(false);
+
+  // If we have permissions, set granted to true
+  useEffect(() => {
+    (async () => {
+      const [p1, p2, started] = await Promise.all([
+        Location.getForegroundPermissionsAsync(),
+        Location.getBackgroundPermissionsAsync(),
+        Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME),
+      ]);
+
+      console.log("permissions", p1, p2, "started", started);
+      setGranted(p1.status === "granted" && p2.status === "granted" && started);
+    })();
+  }, []);
+
+  if (!granted) {
+    return (
+      <View style={styles.container}>
+        <Button
+          title="Grant background location permissions"
+          onPress={() => {
+            requestLocationPermissions()
+              .then((granted) => {
+                console.log("granted", granted);
+                setGranted(granted);
+              })
+              .catch((error) => {
+                console.error("granting location permissions", error);
+              });
+          }}
+        />
+      </View>
+    );
+  } else {
+    return <App session={props.session} />;
+  }
+}
+
+function App(props: { session: string }) {
   const [users, setUsers] = useState<User[]>([]);
 
+  // Update server with our location once at startup
+  useEffect(() => {
+    (async () => {
+      const location = await Location.getCurrentPositionAsync();
+      await updateServer([location]);
+    })();
+  }, []);
+
+  // Update users periodically
   useEffect(() => {
     const updateUsers = () => {
       axios
-        .get(`${HOST}/users`)
+        .get(`${HOST}/users`, {
+          headers: {
+            Authorization: `${props.session}`,
+          },
+        })
         .then((response) => {
-          const change =
+          const changed =
             JSON.stringify(users) !== JSON.stringify(response.data);
-          if (change) {
-            console.log("updated users (changed)");
-          } else {
-            console.log("updated users (no change)");
-          }
-
+          console.log(
+            "updated users" + (changed ? "(changed)" : "(no change)")
+          );
+          console.log(JSON.stringify(response.data, null, 2));
           setUsers(response.data);
         })
         .catch((error) => {
-          console.error("error", error);
+          console.error("update users", error);
         });
     };
 
@@ -214,14 +241,21 @@ function App() {
 
   return (
     <View style={styles.container}>
-      <MapView style={styles.map}>
-        {users.map((user, index) => (
-          <Marker
-            key={index}
-            coordinate={user.location.coords}
-            title={`name: ${user.name}`}
-          />
-        ))}
+      <MapView style={styles.map} provider={PROVIDER_GOOGLE}>
+        {users
+          .filter((u) => !!u.location)
+          .map((user, index) => (
+            <Marker
+              key={index}
+              coordinate={user.location.coords}
+              title={`name: ${user.name}`}
+            >
+              {/* <Image */}
+              {/*   source={{ uri: user.avatar }} */}
+              {/*   style={{ width: 50, height: 50 }} */}
+              {/* /> */}
+            </Marker>
+          ))}
       </MapView>
       <StatusBar style="auto" />
     </View>
