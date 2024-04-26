@@ -32,13 +32,13 @@ const requestLocationPermissions = async () => {
 
 const updateServer = async (locations: Location.LocationObject[]) => {
   const location = locations[0];
-
   console.log("Received new location", location);
+
   // update the server
   const session = JSON.parse(await AsyncStorage.getItem("session"));
   console.log("Using session", session);
   if (!session) {
-    console.error("No session found. Cannot update server!");
+    console.log("No session found. Cannot update server!");
     return;
   }
 
@@ -50,7 +50,7 @@ const updateServer = async (locations: Location.LocationObject[]) => {
     })
     .then((response) => console.log("updated server:", response.status))
     .catch((error) =>
-      console.error("update error:", error, "more:", error.response.data)
+      console.log("update error:", error, "more:", error.response.data)
     );
 };
 
@@ -107,7 +107,17 @@ function useStore<T>(
     })();
   }, [state]);
 
-  return [state, setState];
+  const setStateAndStore = async (value: T) => {
+    if (typeof value === "undefined") {
+      console.error("undefined value for", key);
+      return;
+    }
+
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+    setState(value);
+  };
+
+  return [state, setStateAndStore];
 }
 
 export default function LoginScreen() {
@@ -136,7 +146,10 @@ export default function LoginScreen() {
           code: code,
           code_verifier: request.codeVerifier,
         })
-        .then((response) => setSession(response.data.session))
+        .then((response) => {
+          console.log("login response", response.data);
+          setSession(response.data.session);
+        })
         .catch((error) => console.error("login:", error));
     }
   }, [response]);
@@ -155,11 +168,11 @@ export default function LoginScreen() {
       </View>
     );
   } else {
-    return <AcquireLocation session={session} />;
+    return <AcquireLocation session={session} setSession={setSession} />;
   }
 }
 
-function AcquireLocation(props: { session: string }) {
+function AcquireLocation(props: { session: string; setSession: any }) {
   const [granted, setGranted] = useState(false);
 
   // If we have permissions, set granted to true
@@ -195,11 +208,11 @@ function AcquireLocation(props: { session: string }) {
       </View>
     );
   } else {
-    return <App session={props.session} />;
+    return <App session={props.session} setSession={props.setSession} />;
   }
 }
 
-function App(props: { session: string }) {
+function App(props: { session: string; setSession: any }) {
   const [users, setUsers] = useState<User[]>([]);
 
   // Update server with our location once at startup
@@ -213,6 +226,10 @@ function App(props: { session: string }) {
   // Update users periodically
   useEffect(() => {
     const updateUsers = () => {
+      if (!props.session) {
+        console.log("not updating users, no session");
+        return;
+      }
       axios
         .get(`${HOST}/users`, {
           headers: {
@@ -229,13 +246,17 @@ function App(props: { session: string }) {
         })
         .catch((error) => {
           console.error("update users", error);
+          if (error.response.status === 401) {
+            console.log("------- CLEARING SESSION --------");
+            props.setSession(null);
+          }
         });
     };
 
     updateUsers();
-    const interval = setInterval(() => updateUsers, 1000);
+    const interval = setInterval(() => updateUsers, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [props.session]);
 
   const coords = users[0]?.location?.coords;
   const region = coords
