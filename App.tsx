@@ -239,9 +239,19 @@ function App(props: { session: string }) {
     return () => clearInterval(interval);
   }, []);
 
+  const coords = users[0]?.location?.coords;
+  const region = coords
+    ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.922,
+        longitudeDelta: 0.421,
+      }
+    : null;
+
   return (
     <View style={styles.container}>
-      <MapView style={styles.map} provider={PROVIDER_GOOGLE}>
+      <MapView style={styles.map} provider={PROVIDER_GOOGLE} region={region}>
         {users
           .filter((u) => !!u.location)
           .map((user, index) => (

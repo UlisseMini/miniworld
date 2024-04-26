@@ -110,8 +110,12 @@ def update(location: Location, session: Session = Depends(get_session)):
 
 
 @app.get("/users")
-def get_users(_: Session = Depends(get_session)):
-    return list(db.user_info.values())
+def get_users(session: Session = Depends(get_session)):
+    "Return all users in a list, always return the current user first"
+    # return list(db.user_info.values())
+    user = db.user_info[session]
+    return [user] + [v for k, v in db.user_info.items() if k != session]
+
 
 
 class LoginRequest(BaseModel):
