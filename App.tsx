@@ -22,8 +22,7 @@ const requestLocationPermissions = async () => {
       await Location.requestBackgroundPermissionsAsync();
     if (backgroundStatus === "granted") {
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        // accuracy: Location.Accuracy.Lowest, // PRIVACY. TODO: BETTER SOLUTION
-        accuracy: Location.Accuracy.Highest,
+        accuracy: Location.Accuracy.Lowest, // PRIVACY. TODO: BETTER SOLUTION
       });
       return true;
     }
@@ -69,7 +68,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
 type User = {
   name: string;
-  avatar: string;
+  avatar_url: string;
   location: Location.LocationObject;
 };
 
@@ -224,9 +223,8 @@ function App(props: { session: string }) {
           const changed =
             JSON.stringify(users) !== JSON.stringify(response.data);
           console.log(
-            "updated users" + (changed ? "(changed)" : "(no change)")
+            "updated users " + (changed ? "(changed)" : "(no change)")
           );
-          console.log(JSON.stringify(response.data, null, 2));
           setUsers(response.data);
         })
         .catch((error) => {
@@ -251,19 +249,27 @@ function App(props: { session: string }) {
 
   return (
     <View style={styles.container}>
-      <MapView style={styles.map} provider={PROVIDER_GOOGLE} region={region}>
+      <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={region}
+      >
         {users
-          .filter((u) => !!u.location)
+          // TODO: Get rid of filter; shouldn't have to validate every time.
+          .filter(
+            (u) =>
+              !!u.location &&
+              !!u.location.coords &&
+              typeof u.location.coords.latitude === "number" &&
+              typeof u.location.coords.longitude === "number"
+          )
           .map((user, index) => (
             <Marker
               key={index}
               coordinate={user.location.coords}
               title={`name: ${user.name}`}
             >
-              {/* <Image */}
-              {/*   source={{ uri: user.avatar }} */}
-              {/*   style={{ width: 50, height: 50 }} */}
-              {/* /> */}
+              <Image source={user.avatar_url} style={styles.avatar} />
             </Marker>
           ))}
       </MapView>
@@ -282,5 +288,11 @@ const styles = StyleSheet.create({
   map: {
     width: "100%",
     height: "100%",
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    opacity: 0.7,
   },
 });
