@@ -53,10 +53,13 @@ class DB(BaseModel):
             json.dump(self.model_dump(), f)
 
     def load(self):
-        with open("db.json", "r") as f:
-            data = json.load(f)
-            self.sessions = {Session(k): DiscordAuth(**v) for k, v in data["sessions"].items()}
-            self.user_info = {Session(k): User(**v) for k, v in data["user_info"].items()}
+        try:
+            with open("db.json", "r") as f:
+                data = json.load(f)
+                self.sessions = {Session(k): DiscordAuth(**v) for k, v in data["sessions"].items()}
+                self.user_info = {Session(k): User(**v) for k, v in data["user_info"].items()}
+        except FileNotFoundError:
+            pass
 
 
 db = DB()
@@ -91,7 +94,7 @@ def get_session(authorization: str = Header(None)) -> Session:
             print("Session not in db.sessions")
             raise HTTPException(status_code=401, detail="Invalid session")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid session format: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid session format: {e}")
 
 
 def get_user(session: Session = Depends(get_session)) -> User:
@@ -112,7 +115,7 @@ def update(location: Location, session: Session = Depends(get_session)):
 @app.get("/users")
 def get_users(session: Session = Depends(get_session)):
     "Return all users in a list, always return the current user first"
-    # return list(db.user_info.values())
+    # TODO: Return in order of distance from current user <3
     user = db.user_info[session]
     return [user] + [v for k, v in db.user_info.items() if k != session]
 
@@ -137,7 +140,10 @@ def login(request: LoginRequest):
     })
     if resp.status_code != 200:
         print(resp.text)
-        return {"error": f"Invalid status {resp.status_code} returned from discord."}
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail=f"Discord oauth2/token error"
+        )
 
     body = resp.json()
     auth = DiscordAuth(**body, created_at=int(time.time()))
@@ -148,7 +154,10 @@ def login(request: LoginRequest):
     })
     if resp.status_code != 200:
         print(resp.text)
-        return {"error": f"Invalid status {resp.status_code} returned from discord @me"}
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail=f"Discord users/@me error"
+        )
 
     user_info = resp.json()
     user = User(
@@ -158,6 +167,20 @@ def login(request: LoginRequest):
     )
     print(user)
 
+    # Get guilds the user is in
+    resp = httpx.get("https://discord.com/api/users/@me/guilds", headers={
+        "Authorization": f"{auth.token_type} {auth.access_token}",
+    })
+    if resp.status_code != 200:
+        print(resp.text)
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail=f"Discord users/@me/guilds error"
+        )
+    guilds = resp.json()
+    print(guilds)
+
+    # Create a new session token and store everything
     session = Session(secrets.token_urlsafe(16))
 
     db.sessions[session] = auth
