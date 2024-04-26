@@ -37,3 +37,7 @@ yarn-error.*
 # backend
 __pycache__
 .env
+foo.py
+notes.txt
+ios
+android
