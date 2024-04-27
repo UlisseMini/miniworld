@@ -244,6 +244,10 @@ function LoginPage(props: GlobalProps) {
       onPress={() => {
         // showInRecents: true is required for 2fa on android
         console.log("prompting for login");
+
+        // TODO: Handle promise, maybe change oauth flow to be async-based, as
+        // hooks are weird. Also, this may caused unhandled promise rejection
+        // earlier.
         promptAsync({ showInRecents: true });
       }}
     />
