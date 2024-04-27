@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { StyleSheet, Button, Text, View } from "react-native";
@@ -121,7 +121,7 @@ type GlobalState = {
 
 type GlobalProps = {
   state: GlobalState;
-  setState: (state: GlobalState) => void;
+  setState: (update: (prevState: GlobalState) => GlobalState) => void;
 };
 
 export default function Index() {
@@ -169,14 +169,14 @@ function LoadingPage(props: GlobalProps) {
       );
 
       // Update state based on what we've learned
-      const state = { session: session, hasPermissions, users };
+      const diff = { session: session, hasPermissions, users };
       if (validSession && hasPermissions) {
         await ensureLocationUpdatesStarted();
-        setState({ ...state, page: "map" });
+        setState((state) => ({ ...state, ...diff, page: "map" }));
       } else if (validSession && !hasPermissions) {
-        setState({ ...state, page: "request_location" });
+        setState((state) => ({ ...state, ...diff, page: "request_location" }));
       } else {
-        setState({ ...state, page: "login" });
+        setState((state) => ({ ...state, ...diff, page: "login" }));
       }
     })(); // TODO: catch async exceptions & show an error page
   }, []);
@@ -227,7 +227,7 @@ function LoginPage(props: GlobalProps) {
           const session = response.data.session;
           const users = response.data.users;
           const page = state.hasPermissions ? "map" : "request_location";
-          setState({ page, session, users });
+          setState((state) => ({ ...state, page, session, users }));
           return AsyncStorage.setItem("session", session);
         })
         .then(() => console.log("session stored."))
@@ -256,7 +256,7 @@ function LoginPage(props: GlobalProps) {
 
 // TODO: This should be a Modal that floats above the map
 function RequestLocationPage(props: GlobalProps) {
-  const { state, setState } = props;
+  const { setState } = props;
 
   return (
     <>
@@ -270,7 +270,8 @@ function RequestLocationPage(props: GlobalProps) {
           requestLocationPermissions()
             .then((granted) => {
               if (granted) {
-                setState({ ...state, page: "map", hasPermissions: true });
+                const diff = { hasPermissions: true, page: "map" as Page };
+                setState((state) => ({ ...state, ...diff }));
               } else {
                 // TODO: Error for user
                 console.error("location permissions not granted");
@@ -294,11 +295,11 @@ function MapPage(props: GlobalProps) {
     const updateUsers = async () => {
       try {
         const users = await getUsers(session);
-        setState({ ...state, users });
+        setState((state) => ({ ...state, users }));
       } catch (e) {
         if (e.response.status === 401) {
           console.log("session expired; logging out");
-          setState({ ...state, session: "", page: "login" });
+          setState((state) => ({ ...state, session: "", page: "login" }));
         } else {
           console.error("error updating users:", e);
         }
