@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { StyleSheet, Button, Text, View } from "react-native";
@@ -35,7 +35,7 @@ const updateServer = async (locations: Location.LocationObject[]) => {
   console.log("Received new location", location);
 
   // update the server
-  const session = JSON.parse(await AsyncStorage.getItem("session"));
+  const session = await AsyncStorage.getItem("session");
   console.log("Using session", session);
   if (!session) {
     console.log("No session found. Cannot update server!");
@@ -56,7 +56,7 @@ const updateServer = async (locations: Location.LocationObject[]) => {
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
-    console.error(error);
+    console.error(`${LOCATION_TASK_NAME}:`, error);
     return;
   }
 
@@ -78,50 +78,108 @@ const discovery = {
   revocationEndpoint: "https://discord.com/api/oauth2/token/revoke",
 };
 
-// useState but for an async store
-function useStore<T>(
-  key: string,
-  init: T,
-  override?: boolean
-): [T | null, any] {
-  const [state, setState] = useState<T | null>(init);
+const getUsers = async (session: string) => {
+  if (!session) throw new Error("no session");
+  const response = await axios.get(`${HOST}/users`, {
+    headers: { Authorization: `${session}` },
+  });
 
-  useEffect(() => {
-    (async () => {
-      if (override) await AsyncStorage.removeItem(key);
+  return response.data;
+};
 
-      const item = await AsyncStorage.getItem(key);
-      if (item) {
-        console.log(`loading ${key} -> ${item}`);
-        setState(JSON.parse(item));
-      }
-    })();
-  }, []);
+const hasLocationPermissions = async () => {
+  const [p1, p2] = await Promise.all([
+    Location.getForegroundPermissionsAsync(),
+    Location.getBackgroundPermissionsAsync(),
+  ]);
+  return p1.status === "granted" && p2.status === "granted";
+};
 
-  useEffect(() => {
-    if (!state) return; // FIXME: Stupid hack
-    (async () => {
-      console.log(`setting ${key} -> ${state}`);
-      await AsyncStorage.setItem(key, JSON.stringify(state));
-      console.log(`set ${key} -> ${state}`);
-    })();
-  }, [state]);
+const ensureLocationUpdatesStarted = async () => {
+  const started = await Location.hasStartedLocationUpdatesAsync(
+    LOCATION_TASK_NAME
+  );
 
-  const setStateAndStore = async (value: T) => {
-    if (typeof value === "undefined") {
-      console.error("undefined value for", key);
-      return;
-    }
+  if (!started) {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.Lowest,
+    });
+  }
+};
 
-    await AsyncStorage.setItem(key, JSON.stringify(value));
-    setState(value);
-  };
+type Page = "loading" | "login" | "request_location" | "map";
 
-  return [state, setStateAndStore];
+type GlobalState = {
+  session: string;
+  page: Page;
+  hasPermissions?: boolean;
+  users?: User[];
+};
+
+type GlobalProps = {
+  state: GlobalState;
+  setState: (state: GlobalState) => void;
+};
+
+export default function Index() {
+  // Context probably makes more sense here, whatever
+  const [state, setState] = useState<GlobalState>({
+    page: "loading",
+    session: "",
+  });
+
+  // load the correct page
+  const props = { state, setState: setState };
+  const pageComponent = {
+    loading: () => <LoadingPage {...props} />,
+    login: () => <LoginPage {...props} />,
+    request_location: () => <RequestLocationPage {...props} />,
+    map: () => <MapPage {...props} />,
+  }[state.page]();
+
+  // render the page
+  return (
+    <View style={styles.container}>
+      {pageComponent}
+      <StatusBar style="auto" />
+    </View>
+  );
 }
 
-export default function LoginScreen() {
-  const [session, setSession] = useStore<string>("session", null);
+function LoadingPage(props: GlobalProps) {
+  const { setState } = props;
+
+  // On start, check the status of our session and location permissions,
+  // use that to determine which page to show.
+  useEffect(() => {
+    (async () => {
+      // Check if session is valid
+      const session = await AsyncStorage.getItem("session");
+      const users = await getUsers(session).catch(() => null);
+      const validSession = !!users;
+      console.log("loading users:", users);
+
+      // Check if we have location permissions
+      const hasPermissions = await hasLocationPermissions();
+
+      // Update state based on what we've learned
+      const state = { session: session, hasPermissions, users };
+      if (validSession && hasPermissions) {
+        await ensureLocationUpdatesStarted();
+        setState({ ...state, page: "map" });
+      } else if (validSession && !hasPermissions) {
+        setState({ ...state, page: "request_location" });
+      } else {
+        setState({ ...state, page: "login" });
+      }
+    })(); // TODO: catch async exceptions & show an error page
+  }, []);
+
+  return <Text>Loading...</Text>;
+}
+
+function LoginPage(props: GlobalProps) {
+  const { state, setState } = props;
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: "1232840493696680038",
@@ -135,130 +193,107 @@ export default function LoginScreen() {
     discovery
   );
 
-  // exchange discord code for session once we have it
+  // Exchange discord oauth code for (backend-made) session once we have it
   useEffect(() => {
     if (response?.type === "success") {
       const { code } = response.params;
-      console.log("code", code);
 
-      axios
-        .post(`${HOST}/login/discord`, {
-          code: code,
-          code_verifier: request.codeVerifier,
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest })
+        .then((location) => {
+          return axios.post(`${HOST}/login/discord`, {
+            code: code,
+            code_verifier: request.codeVerifier,
+            location: location,
+          });
         })
         .then((response) => {
           console.log("login response", response.data);
-          setSession(response.data.session);
+          const session = response.data.session;
+          const users = response.data.users;
+          const page = state.hasPermissions ? "map" : "request_location";
+          setState({ page, session, users });
+          return AsyncStorage.setItem("session", session);
         })
-        .catch((error) => console.error("login:", error));
+        .then(() => console.log("session stored."))
+        .catch((error) => console.error("login error", error));
+    } else if (response?.type === "error") {
+      console.error("login error", response.error);
     }
   }, [response]);
 
-  if (!session) {
-    return (
-      <View style={styles.container}>
-        <Button
-          disabled={!request}
-          title="Login with discord"
-          onPress={() => {
-            // showInRecents: true is required for 2fa on android
-            promptAsync({ showInRecents: true });
-          }}
-        />
-      </View>
-    );
-  } else {
-    return <AcquireLocation session={session} setSession={setSession} />;
-  }
+  return (
+    <Button
+      disabled={!request}
+      title="Login with discord"
+      onPress={() => {
+        // showInRecents: true is required for 2fa on android
+        console.log("prompting for login");
+        promptAsync({ showInRecents: true });
+      }}
+    />
+  );
 }
 
-function AcquireLocation(props: { session: string; setSession: any }) {
-  const [granted, setGranted] = useState(false);
+// TODO: This should be a Modal that floats above the map
+function RequestLocationPage(props: GlobalProps) {
+  const { state, setState } = props;
 
-  // If we have permissions, set granted to true
-  useEffect(() => {
-    (async () => {
-      const [p1, p2, started] = await Promise.all([
-        Location.getForegroundPermissionsAsync(),
-        Location.getBackgroundPermissionsAsync(),
-        Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME),
-      ]);
-
-      console.log("permissions", p1, p2, "started", started);
-      setGranted(p1.status === "granted" && p2.status === "granted" && started);
-    })();
-  }, []);
-
-  if (!granted) {
-    return (
-      <View style={styles.container}>
-        <Button
-          title="Grant background location permissions"
-          onPress={() => {
-            requestLocationPermissions()
-              .then((granted) => {
-                console.log("granted", granted);
-                setGranted(granted);
-              })
-              .catch((error) => {
-                console.error("granting location permissions", error);
-              });
-          }}
-        />
-      </View>
-    );
-  } else {
-    return <App session={props.session} setSession={props.setSession} />;
-  }
+  return (
+    <>
+      <Text style={{ fontSize: 20, margin: 50 }}>
+        LocShare needs background location access so we can notify you when
+        there's a potential meetup opportunity!!
+      </Text>
+      <Button
+        title="Grant background location permissions"
+        onPress={() => {
+          requestLocationPermissions()
+            .then((granted) => {
+              if (granted) {
+                setState({ ...state, page: "map", hasPermissions: true });
+              } else {
+                // TODO: Error for user
+                console.error("location permissions not granted");
+              }
+            })
+            .catch((error) => {
+              console.error("granting location permissions", error);
+            });
+        }}
+      />
+    </>
+  );
 }
 
-function App(props: { session: string; setSession: any }) {
-  const [users, setUsers] = useState<User[]>([]);
+function MapPage(props: GlobalProps) {
+  const { state, setState } = props;
+  const { users, session } = state;
 
-  // Update server with our location once at startup
-  useEffect(() => {
-    (async () => {
-      const location = await Location.getCurrentPositionAsync();
-      await updateServer([location]);
-    })();
-  }, []);
-
-  // Update users periodically
-  useEffect(() => {
-    const updateUsers = () => {
-      if (!props.session) {
-        console.log("not updating users, no session");
-        return;
+  // Function to update users in state asynchronously,
+  // and clear the session if we get a 401.
+  const updateUsers = useCallback(async () => {
+    try {
+      const users = await getUsers(session);
+      setState({ ...state, users });
+    } catch (e) {
+      if (e.response.status === 401) {
+        console.log("session expired; logging out");
+        setState({ ...state, session: "", page: "login" });
+      } else {
+        console.error("error updating users:", e);
       }
-      axios
-        .get(`${HOST}/users`, {
-          headers: {
-            Authorization: `${props.session}`,
-          },
-        })
-        .then((response) => {
-          const changed =
-            JSON.stringify(users) !== JSON.stringify(response.data);
-          console.log(
-            "updated users " + (changed ? "(changed)" : "(no change)")
-          );
-          setUsers(response.data);
-        })
-        .catch((error) => {
-          console.error("update users", error);
-          if (error.response.status === 401) {
-            console.log("------- CLEARING SESSION --------");
-            props.setSession(null);
-          }
-        });
-    };
+    }
+  }, []);
 
-    updateUsers();
-    const interval = setInterval(() => updateUsers, 3000);
+  // Update stored users periodically. A websocket would be more data-efficient.
+  useEffect(() => {
+    const interval = setInterval(updateUsers, 3000);
     return () => clearInterval(interval);
-  }, [props.session]);
+  }, [session]);
 
-  const coords = users[0]?.location?.coords;
+  // Acquire our location (users[0] by backend convention) and set the map region
+  // to center on it.
+  const coords = users?.[0]?.location?.coords;
   const region = coords
     ? {
         latitude: coords.latitude,
@@ -269,33 +304,30 @@ function App(props: { session: string; setSession: any }) {
     : null;
 
   return (
-    <View style={styles.container}>
-      <MapView
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={region}
-      >
-        {users
-          // TODO: Get rid of filter; shouldn't have to validate every time.
-          .filter(
-            (u) =>
-              !!u.location &&
-              !!u.location.coords &&
-              typeof u.location.coords.latitude === "number" &&
-              typeof u.location.coords.longitude === "number"
-          )
-          .map((user, index) => (
-            <Marker
-              key={index}
-              coordinate={user.location.coords}
-              title={`name: ${user.name}`}
-            >
-              <Image source={user.avatar_url} style={styles.avatar} />
-            </Marker>
-          ))}
-      </MapView>
-      <StatusBar style="auto" />
-    </View>
+    <MapView
+      style={styles.map}
+      provider={PROVIDER_GOOGLE}
+      initialRegion={region}
+    >
+      {users
+        // TODO: Get rid of filter; shouldn't have to validate every time.
+        ?.filter(
+          (u) =>
+            !!u.location &&
+            !!u.location.coords &&
+            typeof u.location.coords.latitude === "number" &&
+            typeof u.location.coords.longitude === "number"
+        )
+        .map((user, index) => (
+          <Marker
+            key={index}
+            coordinate={user.location.coords}
+            title={`name: ${user.name}`}
+          >
+            <Image source={user.avatar_url} style={styles.avatar} />
+          </Marker>
+        ))}
+    </MapView>
   );
 }
 

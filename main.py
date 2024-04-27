@@ -31,7 +31,7 @@ class Location(BaseModel):
 class User(BaseModel):
     name: str
     avatar_url: str
-    location: Optional[Location]
+    location: Location
 
 
 class DiscordAuth(BaseModel):
@@ -124,6 +124,7 @@ def get_users(session: Session = Depends(get_session)):
 class LoginRequest(BaseModel):
     code: str
     code_verifier: str
+    location: Location
 
 
 @app.post("/login/discord")
@@ -163,7 +164,7 @@ def login(request: LoginRequest):
     user = User(
         name=user_info["username"],
         avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
-        location=None
+        location=request.location,
     )
     print(user)
 
@@ -187,5 +188,6 @@ def login(request: LoginRequest):
     db.user_info[session] = user
     db.save()
 
-    return {"status": "ok", "session": str(session)}
+    # pass users too so frontend doesn't have to make another request.
+    return {"status": "ok", "session": str(session), "users": get_users(session)}
 
