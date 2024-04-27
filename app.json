@@ -17,7 +17,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ulirocks.locshare"
+      "bundleIdentifier": "com.ulirocks.locshare",
+      "config": {
+        "googleMapsApiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -45,6 +48,7 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location",
+          "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

@@ -26,7 +26,10 @@ const requestLocationPermissions = async () => {
       });
       return true;
     }
+    console.warn("background location permissions not granted");
+    return false;
   }
+  console.warn("foreground location permissions not granted");
   return false;
 };
 
@@ -157,10 +160,13 @@ function LoadingPage(props: GlobalProps) {
       const session = await AsyncStorage.getItem("session");
       const users = await getUsers(session).catch(() => null);
       const validSession = !!users;
-      console.log("loading users:", users);
 
       // Check if we have location permissions
       const hasPermissions = await hasLocationPermissions();
+
+      console.log(
+        `valid session?: ${validSession} location perms?: ${hasPermissions}`
+      );
 
       // Update state based on what we've learned
       const state = { session: session, hasPermissions, users };
@@ -198,7 +204,17 @@ function LoginPage(props: GlobalProps) {
     if (response?.type === "success") {
       const { code } = response.params;
 
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest })
+      // FIXME: We need to refactor so we get location perms **BEFORE LOGIN** (BIG REFACTOR)
+      requestLocationPermissions()
+        .then((granted) => {
+          if (!granted) {
+            throw new Error("Location permissions not granted");
+          }
+
+          return Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Lowest,
+          });
+        })
         .then((location) => {
           return axios.post(`${HOST}/login/discord`, {
             code: code,
