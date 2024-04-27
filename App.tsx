@@ -285,24 +285,22 @@ function MapPage(props: GlobalProps) {
   const { state, setState } = props;
   const { users, session } = state;
 
-  // Function to update users in state asynchronously,
-  // and clear the session if we get a 401.
-  const updateUsers = useCallback(async () => {
-    try {
-      const users = await getUsers(session);
-      setState({ ...state, users });
-    } catch (e) {
-      if (e.response.status === 401) {
-        console.log("session expired; logging out");
-        setState({ ...state, session: "", page: "login" });
-      } else {
-        console.error("error updating users:", e);
-      }
-    }
-  }, []);
-
   // Update stored users periodically. A websocket would be more data-efficient.
   useEffect(() => {
+    const updateUsers = async () => {
+      try {
+        const users = await getUsers(session);
+        setState({ ...state, users });
+      } catch (e) {
+        if (e.response.status === 401) {
+          console.log("session expired; logging out");
+          setState({ ...state, session: "", page: "login" });
+        } else {
+          console.error("error updating users:", e);
+        }
+      }
+    };
+
     const interval = setInterval(updateUsers, 3000);
     return () => clearInterval(interval);
   }, [session]);
