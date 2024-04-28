@@ -41,3 +41,6 @@ foo.py
 notes.txt
 ios
 android
+
+# build artifacts from eas I believe
+build-*

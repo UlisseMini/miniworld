@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends, Header, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, NewType
+from typing import Optional, Dict, NewType, List
 from dotenv import load_dotenv
+from traceback import print_exc
+from geopy.distance import geodesic
 
 import httpx
 import secrets
@@ -14,7 +16,20 @@ load_dotenv()
 DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
 
+# Servers we support in beta
+SUPPORTED_SERVERS = set([
+    '1147040380672544808', # lost ones
+    '1014436790251290624', # agents of change
+    '982436897571881061', # atlas fellows
+])
+
+
 app = FastAPI()
+
+
+Session = NewType("Session", str)
+UserID = NewType("UserID", str)
+
 
 class Coords(BaseModel):
     latitude: float
@@ -26,12 +41,8 @@ class Location(BaseModel):
     coords: Coords
     timestamp: float
     mocked: Optional[bool] = None
-
-
-class User(BaseModel):
-    name: str
-    avatar_url: str
-    location: Location
+    # accuracy in meters. TODO
+    # accuracy: int = 0
 
 
 class DiscordAuth(BaseModel):
@@ -43,29 +54,79 @@ class DiscordAuth(BaseModel):
     created_at: int
 
 
-Session = NewType("Session", str)
+class GuildInfo(BaseModel):
+    "Guild info from /users/@me/guilds, we only use id, name, icon for now."
+    id: str
+    name: str
+    icon: Optional[str]
+
+
+class Settings(BaseModel):
+    """
+    User settings. Conceptually 1-1 to a settings screen on the app, except
+    we validate the user is in the guilds they want to share their location with,
+    and that the privacy margin is reasonable.
+    """
+
+    # guild_ids we want to share our location with
+    guild_ids: List[str]
+    # privacy margin in meters
+    privacy_margin: Dict[str, int]
+
+
+class LocatedUser(BaseModel):
+    "Sent to the frontend, contains everything necessary to display a user."
+    id: UserID
+    name: str
+    avatar_url: str
+    location: Location
+    # Guilds in common with the current user
+    common_guilds: List[GuildInfo] = []
+
+
+class UserData(BaseModel):
+    "All the data we store for each user"
+    user: LocatedUser
+    guilds: List[GuildInfo]
+    settings: Settings
+    auth: DiscordAuth
+
+    @property
+    def id(self):
+        return self.user.id
+
+
 class DB(BaseModel):
-    sessions: Dict[Session, DiscordAuth] = {}
-    user_info: Dict[Session, User] = {}
+    """
+    Database model, saved to disk as JSON. Will be converted to a real database later.
+    """
+
+    user_id: Dict[Session, UserID] = {}
+    users: Dict[UserID, UserData] = {}
 
     def save(self):
         with open("db.json", "w") as f:
             json.dump(self.model_dump(), f)
 
-    def load(self):
+
+    @classmethod
+    def load(cls):
         try:
             with open("db.json", "r") as f:
                 data = json.load(f)
-                self.sessions = {Session(k): DiscordAuth(**v) for k, v in data["sessions"].items()}
-                self.user_info = {Session(k): User(**v) for k, v in data["user_info"].items()}
-        except FileNotFoundError:
-            pass
+                return cls(**data)
+
+        except Exception:
+            print_exc()
+            print("Error loading db.json, starting with empty db.")
+            x = cls()
+            x.save()
+            return x
 
 
-db = DB()
-db.load()
+db = DB.load()
 
-print(f"Loaded {len(db.sessions)} sessions and {len(db.user_info)} users from disk.")
+print(f"Loaded {len(db.user_id)} sessions and {len(db.users)} users from disk.")
 
 # get session from Authorization header
 def get_session(authorization: str = Header(None)) -> Session:
@@ -73,52 +134,79 @@ def get_session(authorization: str = Header(None)) -> Session:
         print("Authorization header is missing")
         raise HTTPException(status_code=401, detail="Authorization header is missing")
     try:
-        # Assuming session token is passed directly as Authorization header
-        session_key = Session(authorization)
-        if session_key in db.sessions:
-            # TODO: Use refresh token if expired
-            auth = db.sessions[session_key]
+        # Assuming session token is passed directly as Authorization header, for now
+        # TODO: Should probably switch to Bearer token format, that's more standard.
+        session = Session(authorization)
+        user_id = db.user_id.get(session)
+        if user_id:
+            auth = db.users[user_id].auth
             time_till_expiry = auth.created_at + auth.expires_in - int(time.time())
             if time_till_expiry < 0:
-                # TODO: Maybe this doesn't matter? If the user's authenticated (in past) it's ok?
-                # need to check guilds...
-                print("Session expired")
+                # TODO: Attempt to refresh using refresh token
+                print("Session expired. clearing session.")
+                del db.user_id[session]
                 raise HTTPException(status_code=401, detail="Session expired")
-            if session_key not in db.user_info:
-                # should be populated in login endpoint.
-                print("User not found for session")
-                raise HTTPException(status_code=401, detail="User not found for session")
 
-            return session_key
+            return session
         else:
-            print("Session not in db.sessions")
+            print("Session not in db.user_id")
             raise HTTPException(status_code=401, detail="Invalid session")
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid session format: {e}")
+        # re-raise HTTPException
+        if isinstance(e, HTTPException):
+            raise e
+
+        print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
-def get_user(session: Session = Depends(get_session)) -> User:
-    if session in db.user_info:
-        return db.user_info[session]
-    else:
-        raise HTTPException(status_code=404, detail="User not found")
+
+def get_user_id(session: Session = Depends(get_session)) -> UserID:
+    return db.user_id[session]
+
+def get_user(user_id = Depends(get_user_id)) -> UserData:
+    return db.users[user_id]
 
 
 @app.post("/update")
-def update(location: Location, session: Session = Depends(get_session)):
-    db.user_info[session].location = location
+def update(location: Location, id: UserID = Depends(get_user_id)):
+    db.users[id].location = location
     db.save()
 
     return {"status": "ok"}
 
 
 @app.get("/users")
-def get_users(session: Session = Depends(get_session)):
-    "Return all users in a list, always return the current user first"
-    # TODO: Return in order of distance from current user <3
-    user = db.user_info[session]
-    return [user] + [v for k, v in db.user_info.items() if k != session]
+def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
+    "Return all users, with closest first ([0] is always the current user)"
 
+    # return the users with guilds in common. make sure to use
+    # settings.guilds because we only want to use guilds that are in SUPPORTED_SERVERS,
+    # and settings.guilds is automatically filtered like that. this is a bit scuffed.
+    located_users = []
+
+    user.settings.guild_ids = list(SUPPORTED_SERVERS) # FIXME: REMOVE. FOR TESTING.
+
+    for u in db.users.values():
+        # guilds in common...
+        common_guild_ids = set(u.settings.guild_ids).intersection(user.settings.guild_ids)
+        if common_guild_ids:
+            # add common guilds to each user object so the frontend can display things nicely
+            common_guilds = [g for g in u.guilds if g.id in common_guild_ids]
+            located_users.append(u.user.copy(update=dict(common_guilds=common_guilds)))
+
+
+    # then sort by distance
+    located_users.sort(
+        key=lambda u: geodesic(
+            (user.user.location.coords.latitude, user.user.location.coords.longitude),
+            (u.location.coords.latitude, u.location.coords.longitude)
+        ).kilometers
+    )
+    print(located_users)
+
+
+    return located_users
 
 
 class LoginRequest(BaseModel):
@@ -161,7 +249,8 @@ def login(request: LoginRequest):
         )
 
     user_info = resp.json()
-    user = User(
+    user = LocatedUser(
+        id=user_info["id"],
         name=user_info["username"],
         avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
         location=request.location,
@@ -179,15 +268,41 @@ def login(request: LoginRequest):
             detail=f"Discord users/@me/guilds error"
         )
     guilds = resp.json()
-    print(guilds)
 
     # Create a new session token and store everything
     session = Session(secrets.token_urlsafe(16))
+    db.user_id[session] = user.id
 
-    db.sessions[session] = auth
-    db.user_info[session] = user
+    # Store the rest of the user data, like their discord tokens, guilds, etc.
+    user = UserData(
+        user=user,
+        guilds=[GuildInfo(**g) for g in guilds],
+        settings=Settings(guild_ids=[], privacy_margin={}),
+        auth=auth,
+    )
+    db.users[user.id] = user
     db.save()
 
     # pass users too so frontend doesn't have to make another request.
-    return {"status": "ok", "session": str(session), "users": get_users(session)}
+    return {"status": "ok", "session": str(session), "users": get_users(user), "guilds": guilds}
+
+
+
+@app.post("/settings")
+def settings(request: Settings, user: UserData = Depends(get_user)):
+    if not set(request.guild_ids).issubset(SUPPORTED_SERVERS):
+        raise HTTPException(status_code=400, detail=f"At least one guild id is not supported yet")
+
+    our_guilds = set(g.id for g in user.guilds)
+    if not set(request.guild_ids).issubset(our_guilds):
+        raise HTTPException(status_code=400, detail=f"At least one guild id not in user's guilds")
+
+    if any(v < 0 or v > 10000 for v in request.privacy_margin.values()):
+        raise HTTPException(status_code=400, detail=f"Invalid privacy margin. not in [0, 10000]")
+
+    # good settings! keep them
+    db.users[user.id].settings = request
+    db.save()
+
+    return {"status": "ok"}
 

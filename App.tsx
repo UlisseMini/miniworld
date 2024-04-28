@@ -53,7 +53,7 @@ const updateServer = async (locations: Location.LocationObject[]) => {
     })
     .then((response) => console.log("updated server:", response.status))
     .catch((error) =>
-      console.log("update error:", error, "more:", error.response.data)
+      console.error("update error:", error, "more:", error.response.data)
     );
 };
 
@@ -65,14 +65,21 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
   const locations = (data as any).locations;
   if (locations) {
+    console.log("BACKGROUND LOCATIONS UPDATE");
     updateServer(locations);
   }
 });
+
+type Guild = {
+  name: string;
+  icon: string | null; // url
+};
 
 type User = {
   name: string;
   avatar_url: string;
   location: Location.LocationObject;
+  common_guilds: Guild[];
 };
 
 const discovery = {
@@ -223,7 +230,6 @@ function LoginPage(props: GlobalProps) {
           });
         })
         .then((response) => {
-          console.log("login response", response.data);
           const session = response.data.session;
           const users = response.data.users;
           const page = state.hasPermissions ? "map" : "request_location";
@@ -341,7 +347,10 @@ function MapPage(props: GlobalProps) {
           <Marker
             key={index}
             coordinate={user.location.coords}
-            title={`name: ${user.name}`}
+            title={`username: ${user.name}`}
+            description={`common servers: ${user.common_guilds
+              .map((g) => g.name)
+              .join(", ")}`}
           >
             <Image source={user.avatar_url} style={styles.avatar} />
           </Marker>
