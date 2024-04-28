@@ -3,13 +3,14 @@ from pydantic import BaseModel
 from typing import Optional, Dict, NewType, List
 from dotenv import load_dotenv
 from traceback import print_exc
-from geopy.distance import geodesic
+from geopy.distance import geodesic, Point
 
 import httpx
 import secrets
 import time
 import os
 import json
+import random
 
 load_dotenv()
 
@@ -185,15 +186,29 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
     # and settings.guilds is automatically filtered like that. this is a bit scuffed.
     located_users = []
 
-    user.settings.guild_ids = list(SUPPORTED_SERVERS) # FIXME: REMOVE. FOR TESTING.
-
     for u in db.users.values():
         # guilds in common...
         common_guild_ids = set(u.settings.guild_ids).intersection(user.settings.guild_ids)
         if common_guild_ids:
             # add common guilds to each user object so the frontend can display things nicely
             common_guilds = [g for g in u.guilds if g.id in common_guild_ids]
-            located_users.append(u.user.copy(update=dict(common_guilds=common_guilds)))
+            loc_user = u.user.copy(update=dict(common_guilds=common_guilds), deep=True)
+
+            # randomize distance in a deterministic way according to privacy margin
+            privacy_margin = max(u.settings.privacy_margin[gid] for gid in common_guild_ids)
+
+            random.seed(int(u.id))
+            random_bearing = random.uniform(0, 360)
+            random_meters = random.uniform(0, privacy_margin)
+
+            original_point = Point(loc_user.location.coords.latitude, loc_user.location.coords.longitude)
+            permuted_point = geodesic(meters=random_meters).destination(original_point, random_bearing)
+            loc_user.location.coords.latitude = permuted_point.latitude
+            loc_user.location.coords.longitude = permuted_point.longitude
+
+            # finally save them :)
+            located_users.append(loc_user)
+
 
 
     # then sort by distance
@@ -273,12 +288,21 @@ def login(request: LoginRequest):
     session = Session(secrets.token_urlsafe(16))
     db.user_id[session] = user.id
 
+    # TODO: once /settings page is used by frontend we must get rid of these defaults
+    # and use [] and {} instead.
+
+    supported_guild_ids = [gid for gid in SUPPORTED_SERVERS if gid in [g["id"] for g in guilds]]
+    settings = Settings(
+        guild_ids=supported_guild_ids,
+        privacy_margin={gid: 1000 for gid in supported_guild_ids}, # 1km
+    )
+
     # Store the rest of the user data, like their discord tokens, guilds, etc.
     user = UserData(
         user=user,
         guilds=[GuildInfo(**g) for g in guilds],
-        settings=Settings(guild_ids=[], privacy_margin={}),
         auth=auth,
+        settings=settings,
     )
     db.users[user.id] = user
     db.save()

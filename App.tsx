@@ -168,6 +168,9 @@ function LoadingPage(props: GlobalProps) {
       const users = await getUsers(session).catch(() => null);
       const validSession = !!users;
 
+      // Don't store bad sessions
+      if (!validSession) await AsyncStorage.removeItem("session");
+
       // Check if we have location permissions
       const hasPermissions = await hasLocationPermissions();
 
