@@ -350,7 +350,7 @@ function MapPage(props: GlobalProps) {
           <Marker
             key={index}
             coordinate={user.location.coords}
-            title={`username: ${user.name}`}
+            title={`${user.name}`}
             description={`common servers: ${user.common_guilds
               .map((g) => g.name)
               .join(", ")}`}
