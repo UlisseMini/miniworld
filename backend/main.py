@@ -91,6 +91,7 @@ class UserData(BaseModel):
     guilds: List[GuildInfo]
     settings: Settings
     auth: DiscordAuth
+    pushToken: Optional[str] = None
 
     @property
     def id(self):
@@ -223,6 +224,7 @@ class LoginRequest(BaseModel):
     code: str
     code_verifier: str
     location: Location
+    pushToken: Optional[str] = None
 
 
 @app.post("/login/discord")
@@ -298,6 +300,7 @@ def login(request: LoginRequest):
         guilds=[GuildInfo(**g) for g in guilds],
         auth=auth,
         settings=settings,
+        pushToken=request.pushToken,
     )
     db.users[user.id] = user
     db.save()
