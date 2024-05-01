@@ -26,7 +26,7 @@ Notifications.setNotificationHandler({
 });
 
 // Copied from https://docs.expo.dev/push-notifications/push-notifications-setup
-async function registerForPushNotificationsAsync() {
+async function registerForPushNotificationsAsync(): Promise<String | null> {
   if (Platform.OS === "android") {
     Notifications.setNotificationChannelAsync("default", {
       name: "default",
@@ -61,7 +61,7 @@ async function registerForPushNotificationsAsync() {
         await Notifications.getExpoPushTokenAsync({
           projectId,
         })
-      ).data;
+      )?.data;
       console.log(pushTokenString);
       return pushTokenString;
     } catch (e: unknown) {
@@ -296,7 +296,7 @@ function LoginPage(props: GlobalProps) {
             code: code,
             code_verifier: request.codeVerifier,
             location: location,
-            pushToken: pushToken.data,
+            pushToken: pushToken,
           });
         })
         .then((response) => {
