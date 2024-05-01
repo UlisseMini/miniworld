@@ -16,6 +16,7 @@ load_dotenv()
 
 DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
+BACKEND_SECRET = os.environ["BACKEND_SECRET"]
 
 # Servers we support in beta
 SUPPORTED_SERVERS = set([
@@ -197,7 +198,7 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
             # randomize distance in a deterministic way according to privacy margin
             privacy_margin = max(u.settings.privacy_margin[gid] for gid in common_guild_ids)
 
-            random.seed(int(u.id))
+            random.seed(u.id + BACKEND_SECRET)
             random_bearing = random.uniform(0, 360)
             random_meters = random.uniform(0, privacy_margin)
 
