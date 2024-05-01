@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "752336819884",
+    "project_id": "locshare-b6025",
+    "storage_bucket": "locshare-b6025.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:752336819884:android:581a6a65a9de4d37c03109",
+        "android_client_info": {
+          "package_name": "com.ulirocks.locshare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_81lNzg23DbI6LomDvN5le70KVHctIWM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

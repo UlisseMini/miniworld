@@ -1,18 +1,81 @@
 import { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-import { StyleSheet, Button, Text, View } from "react-native";
+import { StyleSheet, Button, Text, View, Platform } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
 import { Image } from "expo-image";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 
 // WebBrowser.maybeCompleteAuthSession(); // web only; on mobile does nothing
 
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+// Copied from https://docs.expo.dev/push-notifications/push-notifications-setup
+async function registerForPushNotificationsAsync() {
+  if (Platform.OS === "android") {
+    Notifications.setNotificationChannelAsync("default", {
+      name: "default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#FF231F7C",
+    });
+  }
+
+  if (Device.isDevice) {
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== "granted") {
+      handleRegistrationError(
+        "Permission not granted to get push token for push notification!"
+      );
+      return;
+    }
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ??
+      Constants?.easConfig?.projectId;
+    if (!projectId) {
+      handleRegistrationError("Project ID not found");
+    }
+    try {
+      const pushTokenString = (
+        await Notifications.getExpoPushTokenAsync({
+          projectId,
+        })
+      ).data;
+      console.log(pushTokenString);
+      return pushTokenString;
+    } catch (e: unknown) {
+      handleRegistrationError(`${e}`);
+    }
+  } else {
+    console.warn("In simulator: Push notifications disabled.");
+  }
+}
+
+function handleRegistrationError(errorMessage: string) {
+  alert(errorMessage);
+  throw new Error(errorMessage);
+}
 
 const requestLocationPermissions = async () => {
   const { status: foregroundStatus } =
@@ -221,15 +284,19 @@ function LoginPage(props: GlobalProps) {
             throw new Error("Location permissions not granted");
           }
 
-          return Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Lowest,
-          });
+          return Promise.all([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Lowest,
+            }),
+            registerForPushNotificationsAsync(),
+          ]);
         })
-        .then((location) => {
+        .then(([location, pushToken]) => {
           return axios.post(`${HOST}/login/discord`, {
             code: code,
             code_verifier: request.codeVerifier,
             location: location,
+            pushToken: pushToken.data,
           });
         })
         .then((response) => {
