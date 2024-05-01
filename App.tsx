@@ -338,10 +338,8 @@ function MapPage(props: GlobalProps) {
       initialRegion={region}
     >
       {users.map((user, index) => {
-        const latlon = user.location.coords;
-        console.log(
-          `rendering ${user.name} at ${latlon.latitude}, ${latlon.longitude}`
-        );
+        // const latlon = user.location.coords;
+        // console.log(`${user.name} at ${latlon.latitude}, ${latlon.longitude}`);
 
         return <UserMarker key={index} user={user} />;
       })}
