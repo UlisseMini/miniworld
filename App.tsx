@@ -337,28 +337,47 @@ function MapPage(props: GlobalProps) {
       provider={PROVIDER_GOOGLE}
       initialRegion={region}
     >
-      {users
-        // TODO: Get rid of filter; shouldn't have to validate every time.
-        ?.filter(
-          (u) =>
-            !!u.location &&
-            !!u.location.coords &&
-            typeof u.location.coords.latitude === "number" &&
-            typeof u.location.coords.longitude === "number"
-        )
-        .map((user, index) => (
-          <Marker
-            key={index}
-            coordinate={user.location.coords}
-            title={`${user.name}`}
-            description={`common servers: ${user.common_guilds
-              .map((g) => g.name)
-              .join(", ")}`}
-          >
-            <Image source={user.avatar_url} style={styles.avatar} />
-          </Marker>
-        ))}
+      {users.map((user, index) => {
+        const latlon = user.location.coords;
+        console.log(
+          `rendering ${user.name} at ${latlon.latitude}, ${latlon.longitude}`
+        );
+
+        return <UserMarker key={index} user={user} />;
+      })}
     </MapView>
+  );
+}
+
+// Custom marker required because of bug
+// https://github.com/react-native-maps/react-native-maps/issues/3098#issuecomment-881287495
+// supposedly fixed in https://github.com/react-native-maps/react-native-maps/pull/5020 but
+// I upgraded and still had the problem where tracksViewChanges={false} prevented image load.
+//
+// Another solution would be to call redraw() on the marker after the image has loaded,
+// but that would be less react-y. So I'm doing this.
+function UserMarker(props: { user: User }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const user = props.user;
+
+  return (
+    <Marker
+      tracksViewChanges={!imageLoaded}
+      coordinate={user.location.coords}
+      title={`${user.name}`}
+      description={`common servers: ${user.common_guilds
+        .map((g) => g.name)
+        .join(", ")}`}
+    >
+      {/* Use view because setting borderRadius directly on <Image> didn't work on Android. */}
+      <View style={styles.avatarContainer}>
+        <Image
+          style={styles.avatar}
+          source={user.avatar_url}
+          onLoadEnd={() => setImageLoaded(true)}
+        />
+      </View>
+    </Marker>
   );
 }
 
@@ -373,10 +392,15 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  avatar: {
+  avatarContainer: {
     width: 50,
     height: 50,
     borderRadius: 25,
+    overflow: "hidden",
     opacity: 0.7,
+  },
+  avatar: {
+    width: "100%",
+    height: "100%",
   },
 });
