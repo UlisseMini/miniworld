@@ -20,7 +20,7 @@ BACKEND_SECRET = os.environ["BACKEND_SECRET"]
 
 # Servers we support in beta
 SUPPORTED_SERVERS = set([
-    '1147040380672544808', # lost ones
+    # '1147040380672544808', # lost ones
     '1014436790251290624', # agents of change
     '982436897571881061', # atlas fellows
 ])
