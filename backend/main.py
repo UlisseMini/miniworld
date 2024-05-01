@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, NewType, List
 from dotenv import load_dotenv
 from traceback import print_exc
-from geopy.distance import geodesic, Point
+from geopy.distance import geodesic
 
 import httpx
 import secrets
@@ -16,7 +16,6 @@ load_dotenv()
 
 DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
-BACKEND_SECRET = os.environ["BACKEND_SECRET"]
 
 # Servers we support in beta
 SUPPORTED_SERVERS = set([
@@ -196,16 +195,11 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
             loc_user = u.user.copy(update=dict(common_guilds=common_guilds), deep=True)
 
             # randomize distance in a deterministic way according to privacy margin
-            privacy_margin = max(u.settings.privacy_margin[gid] for gid in common_guild_ids)
+            # TODO: Remove privacy margin from everywhere. Rounding lat/lon is simpler.
+            # privacy_margin = max(u.settings.privacy_margin[gid] for gid in common_guild_ids)
 
-            random.seed(u.id + BACKEND_SECRET)
-            random_bearing = random.uniform(0, 360)
-            random_meters = random.uniform(0, privacy_margin)
-
-            original_point = Point(loc_user.location.coords.latitude, loc_user.location.coords.longitude)
-            permuted_point = geodesic(meters=random_meters).destination(original_point, random_bearing)
-            loc_user.location.coords.latitude = permuted_point.latitude
-            loc_user.location.coords.longitude = permuted_point.longitude
+            loc_user.location.coords.latitude = round(loc_user.location.coords.latitude, 2)
+            loc_user.location.coords.longitude = round(loc_user.location.coords.longitude, 2)
 
             # finally save them :)
             located_users.append(loc_user)
