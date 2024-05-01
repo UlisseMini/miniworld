@@ -172,7 +172,7 @@ def get_user(user_id = Depends(get_user_id)) -> UserData:
 
 @app.post("/update")
 def update(location: Location, id: UserID = Depends(get_user_id)):
-    db.users[id].location = location
+    db.users[id].user.location = location
     db.save()
 
     return {"status": "ok"}
