@@ -396,6 +396,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     overflow: "hidden",
     opacity: 0.7,
+    backgroundColor: "#232428",
   },
   avatar: {
     width: "100%",
