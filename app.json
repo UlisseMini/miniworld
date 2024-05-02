@@ -18,6 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ulirocks.locshare",
+      "buildNumber": "3",
       "config": {
         "googleMapsApiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
       }
