@@ -1,7 +1,14 @@
 import { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-import { StyleSheet, Button, Text, View, Platform } from "react-native";
+import {
+  StyleSheet,
+  Button,
+  Pressable,
+  Text,
+  View,
+  Platform,
+} from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
@@ -85,7 +92,7 @@ const requestLocationPermissions = async () => {
       await Location.requestBackgroundPermissionsAsync();
     if (backgroundStatus === "granted") {
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Lowest, // PRIVACY. TODO: BETTER SOLUTION
+        accuracy: Location.Accuracy.Lowest,
       });
       return true;
     }
@@ -314,19 +321,39 @@ function LoginPage(props: GlobalProps) {
   }, [response]);
 
   return (
-    <Button
-      disabled={!request}
-      title="Login with discord"
-      onPress={() => {
-        // showInRecents: true is required for 2fa on android
-        console.log("prompting for login");
+    <>
+      <Button
+        disabled={!request}
+        title="Login with discord"
+        onPress={() => {
+          // showInRecents: true is required for 2fa on android
+          console.log("prompting for login");
 
-        // TODO: Handle promise, maybe change oauth flow to be async-based, as
-        // hooks are weird. Also, this may caused unhandled promise rejection
-        // earlier.
-        promptAsync({ showInRecents: true });
-      }}
-    />
+          // TODO: Handle promise, maybe change oauth flow to be async-based, as
+          // hooks are weird. Also, this may caused unhandled promise rejection
+          // earlier.
+          promptAsync({ showInRecents: true });
+        }}
+      />
+
+      <Pressable
+        style={styles.demoButton}
+        onPress={() => {
+          (async () => {
+            const users = await getUsers("demo");
+            setState((state) => ({
+              ...state,
+              page: "map",
+              session: "demo",
+              users: users,
+              hasPermissions: true,
+            }));
+          })();
+        }}
+      >
+        <Text>Login in demo mode</Text>
+      </Pressable>
+    </>
   );
 }
 
@@ -468,5 +495,9 @@ const styles = StyleSheet.create({
   avatar: {
     width: "100%",
     height: "100%",
+  },
+  demoButton: {
+    color: "gray",
+    marginTop: 20,
   },
 });

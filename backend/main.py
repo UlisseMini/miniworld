@@ -18,10 +18,14 @@ DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
 
 # Servers we support in beta
+DEMO_GUILD_ID = "0000000000000000000"
+DEMO_GUILD = {"id": DEMO_GUILD_ID, "name": "Demo Guild", "icon": None}
+
 SUPPORTED_SERVERS = set([
     # '1147040380672544808', # lost ones
     '1014436790251290624', # agents of change
     '982436897571881061', # atlas fellows
+    DEMO_GUILD_ID, # demo guild id
 ])
 
 
@@ -98,6 +102,7 @@ class UserData(BaseModel):
         return self.user.id
 
 
+
 class DB(BaseModel):
     """
     Database model, saved to disk as JSON. Will be converted to a real database later.
@@ -126,7 +131,55 @@ class DB(BaseModel):
             return x
 
 
+
+def create_demo_user(name: str, id: str) -> UserData:
+    random.seed("demo" + id)
+    dlat = random.uniform(-0.05, 0.05)
+    dlon = random.uniform(-0.05, 0.05)
+
+    return UserData(
+        user=LocatedUser(
+            id=UserID(id),
+            name=name,
+            avatar_url=f"https://cdn.discordapp.com/embed/avatars/{id}.png",
+            location=Location(
+                coords=Coords(
+                    latitude=37.33182 + dlat,
+                    longitude=-122.03118 + dlon,
+                ),
+                timestamp=0,
+            ),
+            common_guilds=[],
+        ),
+        guilds=[GuildInfo(**DEMO_GUILD)],
+        settings=Settings(
+            guild_ids=[DEMO_GUILD_ID],
+            privacy_margin={},
+        ),
+        auth=DiscordAuth(
+            access_token="demo",
+            expires_in=int(1e20), # never
+            refresh_token="demo",
+            scope="demo",
+            token_type="demo",
+            created_at=int(time.time()),
+        ),
+    )
+
+
+
+def setup_demo_user(db: DB):
+    # add demo stuff (for apple testers)
+    db.users[UserID("1")] = create_demo_user(name="Demo User", id="1")
+    db.users[UserID("2")] = create_demo_user(name="Demo User 2", id="2")
+
+    session, userid = Session("demo"), UserID("1")
+    db.user_id[session] = userid # only userid=1 needs to be logged in to
+
+
 db = DB.load()
+setup_demo_user(db)
+
 
 print(f"Loaded {len(db.user_id)} sessions and {len(db.users)} users from disk.")
 
@@ -151,7 +204,7 @@ def get_session(authorization: str = Header(None)) -> Session:
 
             return session
         else:
-            print("Session not in db.user_id")
+            print(f"Session {session} not in db.user_id")
             raise HTTPException(status_code=401, detail="Invalid session")
     except Exception as e:
         # re-raise HTTPException
