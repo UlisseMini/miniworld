@@ -20,7 +20,7 @@
       "bundleIdentifier": "com.ulirocks.miniworld",
       "buildNumber": "3",
       "config": {
-        "googleMapsApiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
+        "googleMapsApiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"
       }
     },
     "android": {
@@ -31,7 +31,7 @@
       "package": "com.ulirocks.miniworld",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
+          "apiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"
         }
       },
       "googleServicesFile": "./google-services.json"
