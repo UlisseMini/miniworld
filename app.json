@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "locshare",
-    "slug": "locshare",
+    "name": "miniworld",
+    "slug": "miniworld",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "com.ulirocks.locshare",
+    "scheme": "com.ulirocks.miniworld",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -17,7 +17,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ulirocks.locshare",
+      "bundleIdentifier": "com.ulirocks.miniworld",
       "buildNumber": "3",
       "config": {
         "googleMapsApiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"
@@ -28,7 +28,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ulirocks.locshare",
+      "package": "com.ulirocks.miniworld",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyC14IBnmWsUegZJOs6sar0TH2tEDPqj_DI"

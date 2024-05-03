@@ -270,7 +270,7 @@ function LoginPage(props: GlobalProps) {
     {
       clientId: "1232840493696680038",
       redirectUri: AuthSession.makeRedirectUri({
-        scheme: "com.ulirocks.locshare",
+        scheme: "com.ulirocks.miniworld",
         path: "redirect",
       }),
       usePKCE: true,

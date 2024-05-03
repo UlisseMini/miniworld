@@ -288,7 +288,7 @@ def login(request: LoginRequest):
         "client_secret": DISCORD_CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": request.code,
-        "redirect_uri": "com.ulirocks.locshare://redirect",
+        "redirect_uri": "com.ulirocks.miniworld://redirect",
         "scope": "identify guilds",
         "code_verifier": request.code_verifier,
     })

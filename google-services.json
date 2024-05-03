@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:752336819884:android:581a6a65a9de4d37c03109",
+        "mobilesdk_app_id": "1:752336819884:android:9ba4c0c5cf1e6923c03109",
         "android_client_info": {
-          "package_name": "com.ulirocks.locshare"
+          "package_name": "com.ulirocks.miniworld"
         }
       },
       "oauth_client": [],
