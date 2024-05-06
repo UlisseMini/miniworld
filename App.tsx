@@ -348,6 +348,7 @@ function LoginPage(props: GlobalProps) {
         onPress={() => {
           (async () => {
             const users = await getUsers("demo");
+            await AsyncStorage.setItem("session", "demo");
             setState((state) => ({
               ...state,
               page: "map",
