@@ -301,7 +301,8 @@ function LoginPage(props: GlobalProps) {
             Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.Lowest,
             }),
-            registerForPushNotificationsAsync(),
+            // registerForPushNotificationsAsync(),
+            null,
           ]);
         })
         .then(([location, pushToken]) => {
