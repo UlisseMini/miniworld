@@ -88,6 +88,9 @@ const requestLocationPermissions = async () => {
   const { status: foregroundStatus } =
     await Location.requestForegroundPermissionsAsync();
   if (foregroundStatus === "granted") {
+    return true;
+
+    // TODO: Ask for background location too (later)
     const { status: backgroundStatus } =
       await Location.requestBackgroundPermissionsAsync();
     if (backgroundStatus === "granted") {
@@ -168,11 +171,14 @@ const getUsers = async (session: string) => {
 };
 
 const hasLocationPermissions = async () => {
-  const [p1, p2] = await Promise.all([
-    Location.getForegroundPermissionsAsync(),
-    Location.getBackgroundPermissionsAsync(),
-  ]);
-  return p1.status === "granted" && p2.status === "granted";
+  return Location.getForegroundPermissionsAsync().then(
+    (p) => p.status === "granted"
+  );
+  // const [p1, p2] = await Promise.all([
+  //   Location.getForegroundPermissionsAsync(),
+  //   Location.getBackgroundPermissionsAsync(),
+  // ]);
+  // return p1.status === "granted" && p2.status === "granted";
 };
 
 const ensureLocationUpdatesStarted = async () => {
@@ -250,12 +256,12 @@ function LoadingPage(props: GlobalProps) {
 
       // Update state based on what we've learned
       const diff = { session: session, hasPermissions, users };
-      if (validSession && hasPermissions) {
+      if (!hasPermissions) {
+        setState((state) => ({ ...state, ...diff, page: "request_location" }));
+      } else if (validSession && hasPermissions) {
         await ensureLocationUpdatesStarted();
         setState((state) => ({ ...state, ...diff, page: "map" }));
-      } else if (validSession && !hasPermissions) {
-        setState((state) => ({ ...state, ...diff, page: "request_location" }));
-      } else {
+      } else if (!validSession && hasPermissions) {
         setState((state) => ({ ...state, ...diff, page: "login" }));
       }
     })(); // TODO: catch async exceptions & show an error page
@@ -361,30 +367,34 @@ function LoginPage(props: GlobalProps) {
 function RequestLocationPage(props: GlobalProps) {
   const { setState } = props;
 
+  const [locationFG, requestFG] = Location.useForegroundPermissions();
+
   return (
     <>
-      <Text style={{ fontSize: 20, margin: 50 }}>
-        LocShare needs background location access so we can notify you when
-        there's a potential meetup opportunity!!
+      <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
+        LocShare needs location access to display you on the map.
       </Text>
-      <Button
-        title="Grant background location permissions"
-        onPress={() => {
-          requestLocationPermissions()
-            .then((granted) => {
-              if (granted) {
-                const diff = { hasPermissions: true, page: "map" as Page };
-                setState((state) => ({ ...state, ...diff }));
+
+      {locationFG?.canAskAgain ? (
+        <Button
+          title="Grant location permissions"
+          onPress={() => {
+            requestFG().then((status) => {
+              if (status.granted) {
+                setState((state) => ({ ...state, page: "loading" }));
               } else {
-                // TODO: Error for user
-                console.error("location permissions not granted");
+                alert("You must grant location permissions to use this app.");
               }
-            })
-            .catch((error) => {
-              console.error("granting location permissions", error);
             });
-        }}
-      />
+          }}
+        />
+      ) : (
+        <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
+          We can't ask for location permissions again, please enable them in
+          your settings.
+          {" Settings > Apps > MiniWorld > Permissions > Location."}
+        </Text>
+      )}
     </>
   );
 }
