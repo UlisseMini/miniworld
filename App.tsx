@@ -413,28 +413,7 @@ function RequestLocationPage(props: GlobalProps) {
 }
 
 function MapPage(props: GlobalProps) {
-  const { state, setState } = props;
-  const { users, session } = state;
-
-  // Update stored users periodically. A websocket would be more data-efficient.
-  useEffect(() => {
-    const updateUsers = async () => {
-      try {
-        const users = await getUsers(session);
-        setState((state) => ({ ...state, users }));
-      } catch (e) {
-        if (e.response.status === 401) {
-          console.log("session expired; logging out");
-          setState((state) => ({ ...state, session: "", page: "login" }));
-        } else {
-          console.error("error updating users:", e);
-        }
-      }
-    };
-
-    const interval = setInterval(updateUsers, 3000);
-    return () => clearInterval(interval);
-  }, [session]);
+  const { users } = props.state;
 
   // Acquire our location (users[0] by backend convention) and set the map region
   // to center on it.
