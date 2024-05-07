@@ -18,7 +18,7 @@ load_dotenv()
 
 DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
-EMAIL = 'ulisse.mini+mw@gmail.com'
+EMAIL = 'uli@miniworld.app'
 
 # Servers we support in beta
 DEMO_GUILD_ID = "0000000000000000000"
