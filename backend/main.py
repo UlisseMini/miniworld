@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, NewType, List
 from dotenv import load_dotenv
@@ -11,11 +12,13 @@ import time
 import os
 import json
 import random
+import html
 
 load_dotenv()
 
 DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
+EMAIL = 'ulisse.mini+mw@gmail.com'
 
 # Servers we support in beta
 DEMO_GUILD_ID = "0000000000000000000"
@@ -363,6 +366,13 @@ def login(request: LoginRequest):
 
 
 
+@app.get("/login/discord")
+def login_discord_html():
+    return HTMLResponse("""
+        <h1>Login</h1>
+    """)
+
+
 @app.post("/settings")
 def settings(request: Settings, user: UserData = Depends(get_user)):
     if not set(request.guild_ids).issubset(SUPPORTED_SERVERS):
@@ -381,3 +391,25 @@ def settings(request: Settings, user: UserData = Depends(get_user)):
 
     return {"status": "ok"}
 
+
+@app.get("/delete_data")
+def delete_data(
+    # user: UserData = Depends(get_user),
+    # session: Session = Depends(get_session)
+):
+    return HTMLResponse(f'<h1>To request data deletion email us <a href="mailto:{EMAIL}">here</a>')
+
+    # del db.users[user.id]
+    # del db.user_id[session]
+    # db.save()
+    # return HTMLResponse('<h1 style="font-family: monospace">All user data deleted. You may close this tab.</h1>')
+
+
+
+PRIVACY_POLICY = open("privacy-policy.txt", "r").read()
+
+@app.get("/privacy-policy")
+async def privacy_policy():
+    return HTMLResponse(
+        content="<pre>" + html.escape(PRIVACY_POLICY) + "</pre>"
+    )
