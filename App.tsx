@@ -8,6 +8,7 @@ import {
   Text,
   View,
   Platform,
+  AppState,
 } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
@@ -83,28 +84,6 @@ function handleRegistrationError(errorMessage: string) {
   alert(errorMessage);
   throw new Error(errorMessage);
 }
-
-const requestLocationPermissions = async () => {
-  const { status: foregroundStatus } =
-    await Location.requestForegroundPermissionsAsync();
-  if (foregroundStatus === "granted") {
-    return true;
-
-    // TODO: Ask for background location too (later)
-    const { status: backgroundStatus } =
-      await Location.requestBackgroundPermissionsAsync();
-    if (backgroundStatus === "granted") {
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.Lowest,
-      });
-      return true;
-    }
-    console.warn("background location permissions not granted");
-    return false;
-  }
-  console.warn("foreground location permissions not granted");
-  return false;
-};
 
 const updateServer = async (locations: Location.LocationObject[]) => {
   const location = locations[0];
@@ -195,11 +174,18 @@ const ensureLocationUpdatesStarted = async () => {
 
 type Page = "loading" | "login" | "request_location" | "map";
 
+type PermissionsState = {
+  foregroundLocation?: Location.PermissionResponse;
+  backgroundLocation?: Location.PermissionResponse;
+  // TODO
+  // pushNotifications?: Notifications.PermissionResponse;
+};
+
 type GlobalState = {
   session: string;
   page: Page;
-  hasPermissions?: boolean;
-  users?: User[];
+  permissions: PermissionsState;
+  users?: User[]; // SHOULD BE IN MAP
 };
 
 type GlobalProps = {
@@ -207,12 +193,41 @@ type GlobalProps = {
   setState: (update: (prevState: GlobalState) => GlobalState) => void;
 };
 
+async function getPermissions(): Promise<PermissionsState> {
+  return {
+    foregroundLocation: await Location.getForegroundPermissionsAsync(),
+    backgroundLocation: await Location.getBackgroundPermissionsAsync(),
+  };
+}
+
+async function refreshState(globalState: GlobalState): Promise<GlobalState> {
+  const permissions = await getPermissions();
+  const session = await AsyncStorage.getItem("session");
+
+  return { ...globalState, permissions, session };
+}
+
 export default function Index() {
   // Context probably makes more sense here, whatever
   const [state, setState] = useState<GlobalState>({
     page: "loading",
     session: "",
+    permissions: {},
   });
+
+  // Keep the global app state up to date with local storage and permisison changes
+  // every time the app is foregrounded or started.
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === "active") {
+        console.log("app state changed to active - refreshing");
+        refreshState(state).then(setState);
+      }
+    };
+
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
 
   // load the correct page
   const props = { state, setState: setState };
@@ -264,7 +279,9 @@ function LoadingPage(props: GlobalProps) {
       } else if (!validSession && hasPermissions) {
         setState((state) => ({ ...state, ...diff, page: "login" }));
       }
-    })(); // TODO: catch async exceptions & show an error page
+    })().catch((e) => {
+      console.error("LoadingPage error", e);
+    });
   }, []);
 
   return <Text>Loading...</Text>;
@@ -290,21 +307,13 @@ function LoginPage(props: GlobalProps) {
     if (response?.type === "success") {
       const { code } = response.params;
 
-      // FIXME: We need to refactor so we get location perms **BEFORE LOGIN** (BIG REFACTOR)
-      requestLocationPermissions()
-        .then((granted) => {
-          if (!granted) {
-            throw new Error("Location permissions not granted");
-          }
-
-          return Promise.all([
-            Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Lowest,
-            }),
-            // registerForPushNotificationsAsync(),
-            null,
-          ]);
-        })
+      Promise.all([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Lowest,
+        }),
+        // registerForPushNotificationsAsync(),
+        null,
+      ])
         .then(([location, pushToken]) => {
           return axios.post(`${HOST}/login/discord`, {
             code: code,
@@ -394,7 +403,9 @@ function RequestLocationPage(props: GlobalProps) {
         <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
           We can't ask for location permissions again, please enable them in
           your settings.
-          {" Settings > Apps > MiniWorld > Permissions > Location."}
+          {
+            " Settings > Apps > MiniWorld > Permissions > Location > Allow Always"
+          }
         </Text>
       )}
     </>
