@@ -149,17 +149,6 @@ const getUsers = async (session: string) => {
   return response.data;
 };
 
-const hasLocationPermissions = async () => {
-  return Location.getForegroundPermissionsAsync().then(
-    (p) => p.status === "granted"
-  );
-  // const [p1, p2] = await Promise.all([
-  //   Location.getForegroundPermissionsAsync(),
-  //   Location.getBackgroundPermissionsAsync(),
-  // ]);
-  // return p1.status === "granted" && p2.status === "granted";
-};
-
 const ensureLocationUpdatesStarted = async () => {
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
@@ -181,11 +170,14 @@ type PermissionsState = {
   // pushNotifications?: Notifications.PermissionResponse;
 };
 
-type GlobalState = {
+type RefreshableState = {
   session: string;
-  page: Page;
   permissions: PermissionsState;
-  users?: User[]; // SHOULD BE IN MAP
+  users?: User[];
+};
+
+type GlobalState = RefreshableState & {
+  page: Page;
 };
 
 type GlobalProps = {
@@ -200,11 +192,31 @@ async function getPermissions(): Promise<PermissionsState> {
   };
 }
 
-async function refreshState(globalState: GlobalState): Promise<GlobalState> {
+function getPage(state: RefreshableState): Page {
+  const { session, permissions, users } = state;
+
+  const validSession = !!session && !!users;
+  const hasPermissions =
+    permissions.foregroundLocation?.granted &&
+    permissions.backgroundLocation?.granted;
+
+  console.log(`valid session?: ${validSession} perms?: ${hasPermissions}`);
+
+  if (!hasPermissions) return "request_location";
+  if (!validSession) return "login";
+
+  return "map";
+}
+
+async function refreshState(): Promise<RefreshableState> {
   const permissions = await getPermissions();
   const session = await AsyncStorage.getItem("session");
+  const users = await getUsers(session).catch((e) => {
+    console.warn(`refreshState: error getting users: ${e}`);
+    null;
+  });
 
-  return { ...globalState, permissions, session };
+  return { permissions, session, users };
 }
 
 export default function Index() {
@@ -221,7 +233,9 @@ export default function Index() {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
         console.log("app state changed to active - refreshing");
-        refreshState(state).then(setState);
+        refreshState().then((diff) =>
+          setState((state) => ({ ...state, ...diff, page: getPage(diff) }))
+        );
       }
     };
 
@@ -254,31 +268,10 @@ function LoadingPage(props: GlobalProps) {
   // use that to determine which page to show.
   useEffect(() => {
     (async () => {
-      // Check if session is valid
-      const session = await AsyncStorage.getItem("session");
-      const users = await getUsers(session).catch(() => null);
-      const validSession = !!users;
-
-      // Don't store bad sessions
-      if (!validSession) await AsyncStorage.removeItem("session");
-
-      // Check if we have location permissions
-      const hasPermissions = await hasLocationPermissions();
-
-      console.log(
-        `valid session?: ${validSession} location perms?: ${hasPermissions}`
-      );
-
-      // Update state based on what we've learned
-      const diff = { session: session, hasPermissions, users };
-      if (!hasPermissions) {
-        setState((state) => ({ ...state, ...diff, page: "request_location" }));
-      } else if (validSession && hasPermissions) {
-        await ensureLocationUpdatesStarted();
-        setState((state) => ({ ...state, ...diff, page: "map" }));
-      } else if (!validSession && hasPermissions) {
-        setState((state) => ({ ...state, ...diff, page: "login" }));
-      }
+      const diff = await refreshState();
+      const page = getPage(diff);
+      if (page === "map") await ensureLocationUpdatesStarted();
+      setState((state) => ({ ...state, ...diff, page }));
     })().catch((e) => {
       console.error("LoadingPage error", e);
     });
@@ -306,31 +299,28 @@ function LoginPage(props: GlobalProps) {
   useEffect(() => {
     if (response?.type === "success") {
       const { code } = response.params;
-
-      Promise.all([
-        Location.getCurrentPositionAsync({
+      (async () => {
+        const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Lowest,
-        }),
-        // registerForPushNotificationsAsync(),
-        null,
-      ])
-        .then(([location, pushToken]) => {
-          return axios.post(`${HOST}/login/discord`, {
-            code: code,
-            code_verifier: request.codeVerifier,
-            location: location,
-            pushToken: pushToken,
-          });
-        })
-        .then((response) => {
-          const session = response.data.session;
-          const users = response.data.users;
-          const page = state.hasPermissions ? "map" : "request_location";
-          setState((state) => ({ ...state, page, session, users }));
-          return AsyncStorage.setItem("session", session);
-        })
-        .then(() => console.log("session stored."))
-        .catch((error) => console.error("login error", error));
+        });
+        const pushToken = null; // registerForPushNotificationsAsync(),
+
+        const response = await axios.post(`${HOST}/login/discord`, {
+          code: code,
+          code_verifier: request.codeVerifier,
+          location: location,
+          pushToken: pushToken,
+        });
+        const session = response.data.session;
+        const users = response.data.users;
+
+        // it's important we set the session before the state since
+        // the loading page refreshes the session from storage.
+        await AsyncStorage.setItem("session", session);
+        setState((state) => ({ ...state, session, users, page: "loading" }));
+      })().catch((e) => {
+        console.error("login error", e);
+      });
     } else if (response?.type === "error") {
       console.error("login error", response.error);
     }
@@ -356,14 +346,11 @@ function LoginPage(props: GlobalProps) {
         style={styles.demoButton}
         onPress={() => {
           (async () => {
-            const users = await getUsers("demo");
             await AsyncStorage.setItem("session", "demo");
             setState((state) => ({
               ...state,
-              page: "map",
+              page: "loading",
               session: "demo",
-              users: users,
-              hasPermissions: true,
             }));
           })();
         }}
@@ -374,38 +361,53 @@ function LoginPage(props: GlobalProps) {
   );
 }
 
-// TODO: This should be a Modal that floats above the map
+async function requestLocationPermissions(): Promise<boolean> {
+  const fg = await Location.requestForegroundPermissionsAsync();
+  const bg = await Location.getBackgroundPermissionsAsync();
+
+  if (fg.granted && bg.granted) return true;
+
+  if (fg.canAskAgain && bg.canAskAgain) {
+    const fg = await Location.requestForegroundPermissionsAsync();
+    if (fg.granted) {
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      return bg.granted;
+    }
+  }
+
+  return false;
+}
+
 function RequestLocationPage(props: GlobalProps) {
   const { setState } = props;
 
-  const [locationFG, requestFG] = Location.useForegroundPermissions();
+  const [showSettingsInstructions, setShowSettingsInstructions] =
+    useState(false);
 
   return (
     <>
       <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
-        LocShare needs location access to display you on the map.
+        Miniworld requires location access to display you on the map.
       </Text>
 
-      {locationFG?.canAskAgain ? (
+      {showSettingsInstructions ? (
         <Button
           title="Grant location permissions"
           onPress={() => {
-            requestFG().then((status) => {
-              if (status.granted) {
+            requestLocationPermissions().then((success) => {
+              if (success) {
                 setState((state) => ({ ...state, page: "loading" }));
               } else {
-                alert("You must grant location permissions to use this app.");
+                setShowSettingsInstructions(true);
               }
             });
           }}
         />
       ) : (
         <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
-          We can't ask for location permissions again, please enable them in
-          your settings.
-          {
-            " Settings > Apps > MiniWorld > Permissions > Location > Allow Always"
-          }
+          We can't ask for location permissions again, please enable the
+          permissions in settings.
+          {` Settings > Apps > MiniWorld > Permissions > Location > Allow Always`}
         </Text>
       )}
     </>
