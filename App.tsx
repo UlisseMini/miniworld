@@ -20,10 +20,10 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 
-// WebBrowser.maybeCompleteAuthSession(); // web only; on mobile does nothing
-
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
+
+console.debug = () => {}; // disable debug logs
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -87,13 +87,13 @@ function handleRegistrationError(errorMessage: string) {
 
 const updateServer = async (locations: Location.LocationObject[]) => {
   const location = locations[0];
-  console.log("Received new location", location);
+  console.debug("Received new location", location);
 
   // update the server
   const session = await AsyncStorage.getItem("session");
-  console.log("Using session", session);
+  console.debug("Using session", session);
   if (!session) {
-    console.log("No session found. Cannot update server!");
+    console.debug("No session found. Cannot update server!");
     return;
   }
 
@@ -103,7 +103,7 @@ const updateServer = async (locations: Location.LocationObject[]) => {
         Authorization: `${session}`,
       },
     })
-    .then((response) => console.log("updated server:", response.status))
+    .then((response) => console.debug("updated server:", response.status))
     .catch((error) =>
       console.error("update error:", error, "more:", error.response.data)
     );
@@ -117,7 +117,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
   const locations = (data as any).locations;
   if (locations) {
-    console.log("BACKGROUND LOCATIONS UPDATE");
+    console.debug("BACKGROUND LOCATIONS UPDATE");
     updateServer(locations);
   }
 });
