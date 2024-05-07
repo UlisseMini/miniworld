@@ -211,10 +211,11 @@ function getPage(state: RefreshableState): Page {
 async function refreshState(): Promise<RefreshableState> {
   const permissions = await getPermissions();
   const session = await AsyncStorage.getItem("session");
-  const users = await getUsers(session).catch((e) => {
-    console.warn(`refreshState: error getting users: ${e}`);
-    null;
-  });
+  const users = session
+    ? await getUsers(session).catch((e) =>
+        console.warn(`refreshState: error getting users: ${e}`)
+      )
+    : null;
 
   return { permissions, session, users };
 }
