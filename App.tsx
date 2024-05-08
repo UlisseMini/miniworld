@@ -3,7 +3,6 @@ import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   StyleSheet,
-  Button,
   Pressable,
   Text,
   View,
