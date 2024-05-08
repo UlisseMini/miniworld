@@ -209,8 +209,11 @@ async function getPermissions(): Promise<PermissionsState> {
   };
 }
 
-function getPage(state: RefreshableState): Page {
+async function getPage(state: RefreshableState): Promise<Page> {
   const { session, permissions, users } = state;
+
+  const locationUpdatesDisabled =
+    (await AsyncStorage.getItem("location-updates-disabled")) !== null;
 
   const validSession = !!session && !!users;
   const hasPermissions =
@@ -219,7 +222,7 @@ function getPage(state: RefreshableState): Page {
 
   console.log(`valid session?: ${validSession} perms?: ${hasPermissions}`);
 
-  if (!hasPermissions) return "request_location";
+  if (!hasPermissions && !locationUpdatesDisabled) return "request_location";
   if (!validSession) return "login";
 
   return "map";
@@ -248,12 +251,12 @@ export default function Index() {
   // Keep the global app state up to date with local storage and permisison changes
   // every time the app is foregrounded or started.
   useEffect(() => {
-    const handleAppStateChange = (nextAppState: string) => {
+    const handleAppStateChange = async (nextAppState: string) => {
       if (nextAppState === "active") {
         console.log("app state changed to active - refreshing");
-        refreshState().then((diff) =>
-          setState((state) => ({ ...state, ...diff, page: getPage(diff) }))
-        );
+        const diff = await refreshState();
+        const page = await getPage(diff);
+        setState((state) => ({ ...state, ...diff, page }));
       }
     };
 
@@ -287,7 +290,7 @@ function LoadingPage(props: GlobalProps) {
   useEffect(() => {
     (async () => {
       const diff = await refreshState();
-      const page = getPage(diff);
+      const page = await getPage(diff);
       if (page === "map") await ensureLocationUpdates();
       setState((state) => ({ ...state, ...diff, page }));
     })().catch((e) => {
@@ -299,7 +302,7 @@ function LoadingPage(props: GlobalProps) {
 }
 
 function LoginPage(props: GlobalProps) {
-  const { state, setState } = props;
+  const { setState } = props;
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: "1232840493696680038",
@@ -318,11 +321,17 @@ function LoginPage(props: GlobalProps) {
     if (response?.type === "success") {
       const { code } = response.params;
       (async () => {
-        const location = anonimizeLocation(
-          await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Lowest,
-          })
-        );
+        const p = await Location.getForegroundPermissionsAsync();
+        const autoUpdatingDisabled =
+          (await AsyncStorage.getItem("location-updates-disabled")) !== null;
+        const location =
+          p.granted && !autoUpdatingDisabled
+            ? anonimizeLocation(
+                await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Lowest,
+                })
+              )
+            : null;
 
         const pushToken = null; // registerForPushNotificationsAsync(),
 
@@ -436,13 +445,24 @@ function RequestLocationPage(props: GlobalProps) {
         </Pressable>
       ) : (
         <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-          We can't ask for {fgGranted ? "background" : "foreground"}{" "}
-          permissions, please enable them in settings.
+          We can't ask for permissions again, please enable them in settings.
           {Platform.OS === "android"
             ? `\nSettings > Apps > MiniWorld > Permissions > Location > Allow Always`
             : `\nSettings > MiniWorld > Location > Always`}
         </Text>
       )}
+
+      <Pressable
+        style={styles.demoButton}
+        onPress={async () => {
+          await AsyncStorage.setItem("location-updates-disabled", "true");
+          setState((state) => ({ ...state, page: "loading" }));
+        }}
+      >
+        <Text style={styles.demoButtonText}>
+          Continue with manual (long-press) location updating.
+        </Text>
+      </Pressable>
     </>
   );
 }
@@ -494,20 +514,18 @@ function MapPage(props: GlobalProps) {
 
             // update server and app state
             await updateServer([location]);
+
+            const users = await getUsers(props.state.session);
             props.setState((state) => ({
               ...state,
-              users: state.users?.map((u, i) =>
-                i === 0 ? { ...u, location } : u
-              ),
+              users,
             }));
           };
 
           // check if they've already seen the confirmation dialog
-          const autoUpdating =
-            (await AsyncStorage.getItem("location-updates-disabled")) ===
-              null &&
-            (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME));
-          if (!autoUpdating) {
+          const needToConfirm =
+            (await AsyncStorage.getItem("location-updates-disabled")) === null;
+          if (!needToConfirm) {
             // don't need confirmation -- they've already seen it.
             await onConfirm();
             return;
@@ -623,9 +641,10 @@ const styles = StyleSheet.create({
     backgroundColor: "gray",
     padding: 10,
     borderRadius: 5,
+    maxWidth: 300,
   },
   demoButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "white",
     textAlign: "center",
   },

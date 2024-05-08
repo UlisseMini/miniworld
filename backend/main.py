@@ -78,13 +78,10 @@ class Settings(BaseModel):
 
     # guild_ids we want to share our location with
     guild_ids: List[str]
-    # privacy margin in meters
-    privacy_margin: Dict[str, int]
 
 
 class LocatedUser(BaseModel):
     "Sent to the frontend, contains everything necessary to display a user."
-    id: UserID
     name: str
     avatar_url: str
     location: Location
@@ -92,19 +89,24 @@ class LocatedUser(BaseModel):
     common_guilds: List[GuildInfo] = []
 
 
+class DiscordUser(BaseModel):
+    id: UserID
+    username: str
+    avatar_url: Optional[str]
+    guilds: List[GuildInfo]
+
+
 class UserData(BaseModel):
     "All the data we store for each user"
-    user: LocatedUser
-    guilds: List[GuildInfo]
+    duser: DiscordUser # info we got from discord
+    location: Optional[Location] # location once set
     settings: Settings
     auth: DiscordAuth
     pushToken: Optional[str] = None
 
     @property
-    def id(self):
-        return self.user.id
-
-
+    def id(self) -> UserID:
+        return UserID(self.duser.id)
 
 class DB(BaseModel):
     """
@@ -141,20 +143,19 @@ def create_demo_user(name: str, id: str) -> UserData:
     dlon = random.uniform(-0.05, 0.05)
 
     return UserData(
-        user=LocatedUser(
+        duser=DiscordUser(
             id=UserID(id),
-            name=name,
+            username=name,
             avatar_url=f"https://cdn.discordapp.com/embed/avatars/{id}.png",
-            location=Location(
-                coords=Coords(
-                    latitude=37.33182 + dlat,
-                    longitude=-122.03118 + dlon,
-                ),
-                timestamp=0,
-            ),
-            common_guilds=[],
+            guilds=[GuildInfo(**DEMO_GUILD)],
         ),
-        guilds=[GuildInfo(**DEMO_GUILD)],
+        location=Location(
+            coords=Coords(
+                latitude=37.33182 + dlat,
+                longitude=-122.03118 + dlon,
+            ),
+            timestamp=0,
+        ),
         settings=Settings(
             guild_ids=[DEMO_GUILD_ID],
             privacy_margin={},
@@ -228,7 +229,7 @@ def get_user(user_id = Depends(get_user_id)) -> UserData:
 
 @app.post("/update")
 def update(location: Location, id: UserID = Depends(get_user_id)):
-    db.users[id].user.location = location
+    db.users[id].location = location
     db.save()
 
     return {"status": "ok"}
@@ -241,37 +242,31 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
     # return the users with guilds in common. make sure to use
     # settings.guilds because we only want to use guilds that are in SUPPORTED_SERVERS,
     # and settings.guilds is automatically filtered like that. this is a bit scuffed.
-    located_users = []
+    located_users = [
+        LocatedUser(
+            name=u.duser.username,
+            # TODO (low priority) get the actual default-avatar they have.
+            avatar_url=u.duser.avatar_url or "https://cdn.discordapp.com/embed/avatars/0.png",
+            location=u.location,
+            common_guilds=[g for g in u.duser.guilds if g.id in user.settings.guild_ids],
+        )
+        for u in db.users.values()
+        if u.location is not None
+    ]
 
-    for u in db.users.values():
-        # guilds in common...
-        common_guild_ids = set(u.settings.guild_ids).intersection(user.settings.guild_ids)
-        if common_guild_ids:
-            # add common guilds to each user object so the frontend can display things nicely
-            common_guilds = [g for g in u.guilds if g.id in common_guild_ids]
-            loc_user = u.user.copy(update=dict(common_guilds=common_guilds), deep=True)
+    # filter out people with no common guilds
+    located_users = [u for u in located_users if u.common_guilds]
 
-            # randomize distance in a deterministic way according to privacy margin
-            # TODO: Remove privacy margin from everywhere. Rounding lat/lon is simpler.
-            # privacy_margin = max(u.settings.privacy_margin[gid] for gid in common_guild_ids)
-
-            loc_user.location.coords.latitude = round(loc_user.location.coords.latitude, 2)
-            loc_user.location.coords.longitude = round(loc_user.location.coords.longitude, 2)
-
-            # finally save them :)
-            located_users.append(loc_user)
-
-
-
-    # then sort by distance
-    located_users.sort(
-        key=lambda u: geodesic(
-            (user.user.location.coords.latitude, user.user.location.coords.longitude),
-            (u.location.coords.latitude, u.location.coords.longitude)
-        ).kilometers
-    )
-    print(located_users)
-
+    # make ourselves the first user returned, if we're located
+    if user.location is not None:
+        coords = user.location.coords
+        located_users = sorted(
+            located_users,
+            key=lambda u: geodesic(
+                (coords.latitude, coords.longitude),
+                (u.location.coords.latitude, u.location.coords.longitude)
+            ).kilometers
+        )
 
     return located_users
 
@@ -279,7 +274,7 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
 class LoginRequest(BaseModel):
     code: str
     code_verifier: str
-    location: Location
+    location: Optional[Location] = None
     pushToken: Optional[str] = None
 
 
@@ -315,15 +310,8 @@ def login(request: LoginRequest):
             status_code=resp.status_code,
             detail=f"Discord users/@me error"
         )
-
     user_info = resp.json()
-    user = LocatedUser(
-        id=user_info["id"],
-        name=user_info["username"],
-        avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
-        location=request.location,
-    )
-    print(user)
+
 
     # Get guilds the user is in
     resp = httpx.get("https://discord.com/api/users/@me/guilds", headers={
@@ -337,23 +325,28 @@ def login(request: LoginRequest):
         )
     guilds = resp.json()
 
+    # Create discord user
+    duser = DiscordUser(
+        id=UserID(user_info["id"]),
+        username=user_info["username"],
+        avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
+        guilds=[GuildInfo(**g) for g in guilds],
+    )
+
     # Create a new session token and store everything
     session = Session(secrets.token_urlsafe(16))
-    db.user_id[session] = user.id
+    db.user_id[session] = duser.id
 
     # TODO: once /settings page is used by frontend we must get rid of these defaults
     # and use [] and {} instead.
 
     supported_guild_ids = [gid for gid in SUPPORTED_SERVERS if gid in [g["id"] for g in guilds]]
-    settings = Settings(
-        guild_ids=supported_guild_ids,
-        privacy_margin={gid: 1000 for gid in supported_guild_ids}, # 1km
-    )
+    settings = Settings(guild_ids=supported_guild_ids)
 
     # Store the rest of the user data, like their discord tokens, guilds, etc.
     user = UserData(
-        user=user,
-        guilds=[GuildInfo(**g) for g in guilds],
+        duser=duser,
+        location=request.location,
         auth=auth,
         settings=settings,
         pushToken=request.pushToken,
@@ -378,7 +371,7 @@ def settings(request: Settings, user: UserData = Depends(get_user)):
     if not set(request.guild_ids).issubset(SUPPORTED_SERVERS):
         raise HTTPException(status_code=400, detail=f"At least one guild id is not supported yet")
 
-    our_guilds = set(g.id for g in user.guilds)
+    our_guilds = set(g.id for g in user.duser.guilds)
     if not set(request.guild_ids).issubset(our_guilds):
         raise HTTPException(status_code=400, detail=f"At least one guild id not in user's guilds")
 
