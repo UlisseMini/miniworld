@@ -19,6 +19,7 @@ import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
+import { MaterialIcons } from "@expo/vector-icons";
 
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
@@ -431,18 +432,31 @@ function MapPage(props: GlobalProps) {
     : null;
 
   return (
-    <MapView
-      style={styles.map}
-      provider={PROVIDER_GOOGLE}
-      initialRegion={region}
-    >
-      {users.map((user, index) => {
-        // const latlon = user.location.coords;
-        // console.log(`${user.name} at ${latlon.latitude}, ${latlon.longitude}`);
+    <>
+      <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={region}
+      >
+        {users.map((user, index) => {
+          // const latlon = user.location.coords;
+          // console.log(`${user.name} at ${latlon.latitude}, ${latlon.longitude}`);
 
-        return <UserMarker key={index} user={user} />;
-      })}
-    </MapView>
+          return <UserMarker key={index} user={user} />;
+        })}
+      </MapView>
+
+      <MaterialIcons
+        name="logout"
+        size={24}
+        color="black"
+        style={styles.logoutButton}
+        onPress={async () => {
+          await AsyncStorage.removeItem("session");
+          props.setState((state) => ({ ...state, page: "loading" }));
+        }}
+      />
+    </>
   );
 }
 
@@ -504,5 +518,10 @@ const styles = StyleSheet.create({
   demoButton: {
     color: "gray",
     marginTop: 20,
+  },
+  logoutButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 40 : 25,
+    right: 10,
   },
 });
