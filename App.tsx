@@ -431,7 +431,7 @@ function RequestLocationPage(props: GlobalProps) {
       ) : (
         <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
           We can't ask for {fgGranted ? "background" : "foreground"} permissions
-          again, please enable them in settings.
+          :( please enable them in settings.
           {`\nSettings > Apps > MiniWorld > Permissions > Location > Allow Always`}
         </Text>
       )}
