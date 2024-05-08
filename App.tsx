@@ -460,6 +460,7 @@ function MapPage(props: GlobalProps) {
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={region}
+        moveOnMarkerPress={false}
       >
         {users.map((user, index) => {
           // const latlon = user.location.coords;
