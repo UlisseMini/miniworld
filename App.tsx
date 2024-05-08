@@ -110,6 +110,15 @@ const updateServer = async (locations: Location.LocationObject[]) => {
     );
 };
 
+function anonimizeLocation(
+  location: Location.LocationObject
+): Location.LocationObject {
+  // Round lat/lon to 2 decimals. Works out to 2-3km accuracy.
+  location.coords.latitude = Math.round(location.coords.latitude * 100) / 100;
+  location.coords.longitude = Math.round(location.coords.longitude * 100) / 100;
+  return location;
+}
+
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
     console.error(`${LOCATION_TASK_NAME}:`, error);
@@ -119,7 +128,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   const locations = (data as any).locations;
   if (locations) {
     console.debug("BACKGROUND LOCATIONS UPDATE");
-    updateServer(locations);
+    updateServer(locations.map(anonimizeLocation));
   }
 });
 
@@ -158,6 +167,8 @@ const ensureLocationUpdatesStarted = async () => {
   if (!started) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.Lowest,
+      deferredUpdatesDistance: 3000, // if they haven't moved 3km don't update
+      deferredUpdatesInterval: 1000 * 60 * 60, // update at most once every hour
     });
   }
 };
@@ -302,9 +313,12 @@ function LoginPage(props: GlobalProps) {
     if (response?.type === "success") {
       const { code } = response.params;
       (async () => {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Lowest,
-        });
+        const location = anonimizeLocation(
+          await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Lowest,
+          })
+        );
+
         const pushToken = null; // registerForPushNotificationsAsync(),
 
         const response = await axios.post(`${HOST}/login/discord`, {
