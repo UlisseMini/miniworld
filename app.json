@@ -21,7 +21,8 @@
       "buildNumber": "6",
       "config": {
         "googleMapsApiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"
-      }
+      },
+      "requireFullScreen": true
     },
     "android": {
       "versionCode": 5,
