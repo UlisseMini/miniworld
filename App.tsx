@@ -330,19 +330,18 @@ function LoginPage(props: GlobalProps) {
 
   return (
     <>
-      <Button
+      <Pressable
         disabled={!request}
-        title="Login with discord"
+        style={styles.loginButton}
         onPress={() => {
           // showInRecents: true is required for 2fa on android
           console.log("prompting for login");
 
-          // TODO: Handle promise, maybe change oauth flow to be async-based, as
-          // hooks are weird. Also, this may caused unhandled promise rejection
-          // earlier.
           promptAsync({ showInRecents: true });
         }}
-      />
+      >
+        <Text style={styles.loginButtonText}>Login with discord</Text>
+      </Pressable>
 
       <Pressable
         style={styles.demoButton}
@@ -357,7 +356,7 @@ function LoginPage(props: GlobalProps) {
           })();
         }}
       >
-        <Text>Login in demo mode</Text>
+        <Text style={styles.demoButtonText}>Login in demo mode</Text>
       </Pressable>
     </>
   );
@@ -515,9 +514,27 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  loginButton: {
+    backgroundColor: "blue",
+    padding: 15,
+    borderRadius: 5,
+    margin: 20,
+  },
+  loginButtonText: {
+    fontSize: 20,
+    color: "white",
+    textAlign: "center",
+  },
   demoButton: {
-    color: "gray",
-    marginTop: 20,
+    marginTop: 30,
+    backgroundColor: "gray",
+    padding: 10,
+    borderRadius: 5,
+  },
+  demoButtonText: {
+    fontSize: 12,
+    color: "white",
+    textAlign: "center",
   },
   logoutButton: {
     position: "absolute",
