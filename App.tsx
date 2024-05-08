@@ -8,6 +8,7 @@ import {
   View,
   Platform,
   AppState,
+  Alert,
 } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
@@ -158,7 +159,12 @@ const getUsers = async (session: string) => {
   return response.data;
 };
 
-const ensureLocationUpdatesStarted = async () => {
+const ensureLocationUpdates = async () => {
+  if ((await AsyncStorage.getItem("location-updates-disabled")) !== null) {
+    console.log("location updates disabled. not starting.");
+    return;
+  }
+
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
   );
@@ -282,7 +288,7 @@ function LoadingPage(props: GlobalProps) {
     (async () => {
       const diff = await refreshState();
       const page = getPage(diff);
-      if (page === "map") await ensureLocationUpdatesStarted();
+      if (page === "map") await ensureLocationUpdates();
       setState((state) => ({ ...state, ...diff, page }));
     })().catch((e) => {
       console.error("LoadingPage error", e);
@@ -461,6 +467,66 @@ function MapPage(props: GlobalProps) {
         provider={PROVIDER_GOOGLE}
         initialRegion={region}
         moveOnMarkerPress={false}
+        onLongPress={async (e) => {
+          console.log("user long-pressed at", e.nativeEvent.coordinate);
+          // Popup asking if the user would like to set their location there.
+          const location: Location.LocationObject = anonimizeLocation({
+            coords: {
+              latitude: e.nativeEvent.coordinate.latitude,
+              longitude: e.nativeEvent.coordinate.longitude,
+              altitude: null,
+              accuracy: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+            },
+            timestamp: Date.now(),
+          });
+
+          const onConfirm = async () => {
+            // stop location updates
+            await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME).catch(
+              () => null
+            );
+            await AsyncStorage.setItem("location-updates-disabled", "true");
+
+            // update server and app state
+            await updateServer([location]);
+            props.setState((state) => ({
+              ...state,
+              users: state.users?.map((u, i) =>
+                i === 0 ? { ...u, location } : u
+              ),
+            }));
+          };
+
+          // check if they've already seen the confirmation dialog
+          const autoUpdating =
+            (await AsyncStorage.getItem("location-updates-disabled")) ===
+              null &&
+            (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME));
+          if (!autoUpdating) {
+            // don't need confirmation -- they've already seen it.
+            await onConfirm();
+            return;
+          }
+
+          Alert.alert(
+            "Set your location here?",
+            "This will update your location on the map and disable automatic updates.",
+            [
+              {
+                text: "Cancel",
+                style: "cancel",
+              },
+              {
+                text: "Set",
+                style: "default",
+                onPress: onConfirm,
+              },
+            ]
+          );
+        }}
       >
         {users.map((user, index) => {
           // const latlon = user.location.coords;
@@ -476,7 +542,7 @@ function MapPage(props: GlobalProps) {
         color="black"
         style={styles.logoutButton}
         onPress={async () => {
-          await AsyncStorage.removeItem("session");
+          await AsyncStorage.clear();
           props.setState((state) => ({ ...state, page: "loading" }));
         }}
       />
