@@ -332,7 +332,7 @@ function LoginPage(props: GlobalProps) {
     <>
       <Pressable
         disabled={!request}
-        style={styles.loginButton}
+        style={styles.defaultButton}
         onPress={() => {
           // showInRecents: true is required for 2fa on android
           console.log("prompting for login");
@@ -340,7 +340,7 @@ function LoginPage(props: GlobalProps) {
           promptAsync({ showInRecents: true });
         }}
       >
-        <Text style={styles.loginButtonText}>Login with discord</Text>
+        <Text style={styles.defaultButtonText}>Login with discord</Text>
       </Pressable>
 
       <Pressable
@@ -362,53 +362,64 @@ function LoginPage(props: GlobalProps) {
   );
 }
 
-async function requestLocationPermissions(): Promise<boolean> {
-  const fg = await Location.requestForegroundPermissionsAsync();
-  const bg = await Location.getBackgroundPermissionsAsync();
-
-  if (fg.granted && bg.granted) return true;
-
-  if (fg.canAskAgain && bg.canAskAgain) {
-    const fg = await Location.requestForegroundPermissionsAsync();
-    if (fg.granted) {
-      const bg = await Location.requestBackgroundPermissionsAsync();
-      return bg.granted;
-    }
-  }
-
-  return false;
-}
-
 function RequestLocationPage(props: GlobalProps) {
   const { setState } = props;
 
-  const [showSettingsInstructions, setShowSettingsInstructions] =
-    useState(false);
+  const [canAsk, setCanAsk] = useState(false);
+  const [fgGranted, setFgGranted] = useState(false);
+
+  // Check if we can ask again
+  useEffect(() => {
+    (async () => {
+      const fg = await Location.getForegroundPermissionsAsync();
+      const bg = await Location.getBackgroundPermissionsAsync();
+
+      setCanAsk(fg.canAskAgain && bg.canAskAgain);
+      setFgGranted(fg.granted);
+    })().catch((e) => {
+      console.error("RequestLocationPage error", e);
+    });
+  }, []);
 
   return (
     <>
-      <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
-        Miniworld requires location access to display you on the map.
+      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
+        Miniworld requires background location access to keep your location on
+        the map up-to-date.
       </Text>
 
-      {showSettingsInstructions ? (
-        <Button
-          title="Grant location permissions"
+      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
+        Your location is accurate up to 3km. Your exact location never leaves
+        your device.
+      </Text>
+
+      {canAsk ? (
+        <Pressable
           onPress={() => {
-            requestLocationPermissions().then((success) => {
-              if (success) {
+            const permPromise = fgGranted
+              ? Location.requestBackgroundPermissionsAsync()
+              : Location.requestForegroundPermissionsAsync();
+
+            permPromise.then((p) => {
+              if (p.granted) {
                 setState((state) => ({ ...state, page: "loading" }));
               } else {
-                setShowSettingsInstructions(true);
+                setCanAsk(p.canAskAgain);
               }
             });
           }}
-        />
+          style={styles.defaultButton}
+        >
+          <Text style={styles.defaultButtonText}>
+            Grant {fgGranted ? "background" : "foreground"} location permissions
+            {fgGranted && Platform.OS === "android" ? " (opens settings)" : ""}
+          </Text>
+        </Pressable>
       ) : (
-        <Text style={{ fontSize: 20, textAlign: "center", margin: 20 }}>
-          We can't ask for location permissions again, please enable the
-          permissions in settings.
-          {` Settings > Apps > MiniWorld > Permissions > Location > Allow Always`}
+        <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
+          We can't ask for {fgGranted ? "background" : "foreground"} permissions
+          again, please enable them in settings.
+          {`\nSettings > Apps > MiniWorld > Permissions > Location > Allow Always`}
         </Text>
       )}
     </>
@@ -467,12 +478,12 @@ function MapPage(props: GlobalProps) {
 // Another solution would be to call redraw() on the marker after the image has loaded,
 // but that would be less react-y. So I'm doing this.
 function UserMarker(props: { user: User }) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const user = props.user;
 
   return (
     <Marker
-      tracksViewChanges={!imageLoaded}
+      tracksViewChanges={tracksViewChanges}
       coordinate={user.location.coords}
       title={`${user.name}`}
       description={`common servers: ${user.common_guilds
@@ -484,7 +495,7 @@ function UserMarker(props: { user: User }) {
         <Image
           style={styles.avatar}
           source={user.avatar_url}
-          onLoadEnd={() => setImageLoaded(true)}
+          onLoadEnd={() => setTracksViewChanges(false)}
         />
       </View>
     </Marker>
@@ -514,13 +525,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  loginButton: {
+  defaultButton: {
     backgroundColor: "blue",
     padding: 15,
     borderRadius: 5,
     margin: 20,
   },
-  loginButtonText: {
+  defaultButtonText: {
     fontSize: 20,
     color: "white",
     textAlign: "center",
