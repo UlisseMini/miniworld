@@ -406,3 +406,10 @@ async def privacy_policy():
     return HTMLResponse(
         content="<pre>" + html.escape(PRIVACY_POLICY) + "</pre>"
     )
+
+
+@app.get("/support")
+async def support():
+    return HTMLResponse(
+        content=f'<pre>For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
+    )
