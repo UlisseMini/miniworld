@@ -385,12 +385,15 @@ def settings(request: Settings, user: UserData = Depends(get_user)):
     return {"status": "ok"}
 
 
+PRE_STYLES = "white-space: pre-wrap; max-width: 70ch; line-height: 1.3;"
+
+
 @app.get("/delete_data")
 def delete_data(
     # user: UserData = Depends(get_user),
     # session: Session = Depends(get_session)
 ):
-    return HTMLResponse(f'<h1>To request data deletion email us <a href="mailto:{EMAIL}">here</a>')
+    return HTMLResponse(f'<pre style="{PRE_STYLES}">To request data deletion email us <a href="mailto:{EMAIL}">here</a>.</pre>')
 
     # del db.users[user.id]
     # del db.user_id[session]
@@ -404,12 +407,12 @@ PRIVACY_POLICY = open("privacy-policy.txt", "r").read()
 @app.get("/privacy-policy")
 async def privacy_policy():
     return HTMLResponse(
-        content="<pre>" + html.escape(PRIVACY_POLICY) + "</pre>"
+        content=f'<pre style="{PRE_STYLES}">' + html.escape(PRIVACY_POLICY) + '</pre>'
     )
 
 
 @app.get("/support")
 async def support():
     return HTMLResponse(
-        content=f'<pre>For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
+        content=f'<pre style="{PRE_STYLES}">For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
     )

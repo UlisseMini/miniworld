@@ -1,1 +1,54 @@
-Everything is mine.
+Privacy Policy for MiniWorld
+
+Welcome to MiniWorld. Our app lets you share your location with others via Discord. We're committed to protecting your privacy. This privacy policy explains what information we collect, how we use it, and your choices regarding your data.
+
+What Information We Collect
+
+1. Discord Authentication: We use your Discord login to authenticate your account and fetch the list of Discord guilds you belong to. This helps us establish who you can share your location with.
+
+2. Location Data: When you use our app, we collect your location data. To protect your privacy, we round this data to about 3 kilometers accuracy before it's shared with others or sent to our servers.
+
+How We Use Your Data
+
+- To Provide Our Services: We use your location and Discord details to enable location sharing with users in your Discord guilds.
+- For App Functionality: Your information helps us deliver and improve essential app features.
+
+Data Sharing
+
+We do not sell your data. We only share your data with:
+
+- Discord, for authentication and to fetch guild information.
+- Service Providers: Companies that help us run our service, such as hosting providers. They must adhere to privacy commitments that are as protective as our policy.
+
+Your Choices and Controls
+
+1. Push Notifications: You can opt-in or opt-out of push notifications at any time through our app settings.
+
+2. Location Data: If you do not consent to share your location, you can manually enter an address as an alternative.
+
+3. Data Deletion: You can delete your data anytime at https://miniworld.app/delete_data.
+
+4. Revoking Access: You can revoke our access to your Discord credentials and disable data sharing through the app settings.
+
+Data Retention
+
+We do not store your location history. Your other data is kept only as long as necessary for the purposes outlined in this policy or as required by law.
+
+Children's Privacy
+
+MiniWorld does not knowingly collect information from children under the age of 13. If we learn that we have collected such information, we will take steps to delete it promptly.
+
+Changes to This Policy
+
+We may update this privacy policy occasionally. We will notify you of any significant changes and post the updated policy on our website.
+
+Contact Us
+
+If you have questions about our privacy practices, please contact us at [Insert Contact Information].
+
+Conclusion
+
+We're here to provide a service that lets you share where you are, not to gather data about you. We'll ask only for what we need and tell you how we'll use it. We don't collect more than we need, and we don't keep it longer than we have to.
+
+Thank you for trusting MiniWorld with your location sharing needs.
+
