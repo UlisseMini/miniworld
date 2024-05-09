@@ -20,6 +20,7 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
@@ -262,6 +263,13 @@ export default function Index() {
 
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
+  }, []);
+
+  // Fix screen orientation (support all orientations)
+  useEffect(() => {
+    ScreenOrientation.unlockAsync()
+      .then(() => console.log("Screen orientation unlocked"))
+      .catch((e) => console.error("Screen orientation error", e));
   }, []);
 
   // load the correct page
