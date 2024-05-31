@@ -18,14 +18,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ulirocks.miniworld",
-      "buildNumber": "6",
+      "buildNumber": "8",
       "config": {
         "googleMapsApiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"
       },
       "requireFullScreen": true
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -51,7 +51,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your location",
+          "locationAlwaysAndWhenInUsePermission": "$(PRODUCT_NAME) shares rough location with groups the user is in",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
