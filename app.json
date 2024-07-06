@@ -51,7 +51,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "$(PRODUCT_NAME) shares rough location with groups the user is in",
+          "locationAlwaysAndWhenInUsePermission": "Turning on location services allows us to show you when friends are nearby.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
