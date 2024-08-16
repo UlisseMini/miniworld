@@ -1,0 +1,14 @@
+[Unit]
+Description=MiniWorld Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/miniworld/backend
+ExecStart=/bin/bash -c '. ./.venv/bin/activate && python -u main.py'
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
