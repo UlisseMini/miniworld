@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+[ ! -d ".venv" ] && python3 -m venv .venv
+. .venv/bin/activate
+
+# Install dependencies
+pip install -U "fastapi[standard]" pydantic python-dotenv geopy httpx
+
 # cd to script directory
 cd "$(dirname "$0")"
 
