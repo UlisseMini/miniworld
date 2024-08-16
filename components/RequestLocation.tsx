@@ -9,9 +9,9 @@ import {
 import { Text, Button, Divider } from "@rneui/themed";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { GlobalProps } from "../lib/types";
 
-// TODO: Import typechecking
-export default function RequestLocation({ setState }: any) {
+export default function RequestLocation({ setState }: GlobalProps) {
   const [canAsk, setCanAsk] = useState(false);
   const [fgGranted, setFgGranted] = useState(false);
 
