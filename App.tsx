@@ -22,9 +22,19 @@ import * as Device from "expo-device";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
 import RequestLocationPage from "./components/RequestLocation";
+import LoginPage from "./components/Login";
+import {
+  User,
+  PermissionsState,
+  RefreshableState,
+  Page,
+  GlobalState,
+  GlobalProps,
+} from "./lib/types";
+import { anonimizeLocation } from "./lib/utils";
+import { HOST } from "./lib/constants";
 
 const LOCATION_TASK_NAME = "background-location-task";
-const HOST = "https://loc.uli.rocks";
 
 console.debug = () => {}; // disable debug logs
 
@@ -112,15 +122,6 @@ const updateServer = async (locations: Location.LocationObject[]) => {
     );
 };
 
-function anonimizeLocation(
-  location: Location.LocationObject
-): Location.LocationObject {
-  // Round lat/lon to 2 decimals. Works out to 2-3km accuracy.
-  location.coords.latitude = Math.round(location.coords.latitude * 100) / 100;
-  location.coords.longitude = Math.round(location.coords.longitude * 100) / 100;
-  return location;
-}
-
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
     console.error(`${LOCATION_TASK_NAME}:`, error);
@@ -133,18 +134,6 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     updateServer(locations.map(anonimizeLocation));
   }
 });
-
-type Guild = {
-  name: string;
-  icon: string | null; // url
-};
-
-type User = {
-  name: string;
-  avatar_url: string;
-  location: Location.LocationObject;
-  common_guilds: Guild[];
-};
 
 const discovery = {
   authorizationEndpoint: "https://discord.com/api/oauth2/authorize",
@@ -178,30 +167,6 @@ const ensureLocationUpdates = async () => {
       deferredUpdatesInterval: 1000 * 60 * 60, // update at most once every hour
     });
   }
-};
-
-type Page = "loading" | "login" | "request_location" | "map";
-
-type PermissionsState = {
-  foregroundLocation?: Location.PermissionResponse;
-  backgroundLocation?: Location.PermissionResponse;
-  // TODO
-  // pushNotifications?: Notifications.PermissionResponse;
-};
-
-type RefreshableState = {
-  session: string;
-  permissions: PermissionsState;
-  users?: User[];
-};
-
-type GlobalState = RefreshableState & {
-  page: Page;
-};
-
-type GlobalProps = {
-  state: GlobalState;
-  setState: (update: (prevState: GlobalState) => GlobalState) => void;
 };
 
 async function getPermissions(): Promise<PermissionsState> {
@@ -308,95 +273,6 @@ function LoadingPage(props: GlobalProps) {
   }, []);
 
   return <Text>Loading...</Text>;
-}
-
-function LoginPage(props: GlobalProps) {
-  const { setState } = props;
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: "1232840493696680038",
-      redirectUri: AuthSession.makeRedirectUri({
-        scheme: "com.ulirocks.miniworld",
-        path: "redirect",
-      }),
-      usePKCE: true,
-      scopes: ["identify", "guilds"],
-    },
-    discovery
-  );
-
-  // Exchange discord oauth code for (backend-made) session once we have it
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { code } = response.params;
-      (async () => {
-        const p = await Location.getForegroundPermissionsAsync();
-        const autoUpdatingDisabled =
-          (await AsyncStorage.getItem("location-updates-disabled")) !== null;
-        const location =
-          p.granted && !autoUpdatingDisabled
-            ? anonimizeLocation(
-                await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Lowest,
-                })
-              )
-            : null;
-
-        const pushToken = null; // registerForPushNotificationsAsync(),
-
-        const response = await axios.post(`${HOST}/login/discord`, {
-          code: code,
-          code_verifier: request.codeVerifier,
-          location: location,
-          pushToken: pushToken,
-        });
-        const session = response.data.session;
-        const users = response.data.users;
-
-        // it's important we set the session before the state since
-        // the loading page refreshes the session from storage.
-        await AsyncStorage.setItem("session", session);
-        setState((state) => ({ ...state, session, users, page: "loading" }));
-      })().catch((e) => {
-        console.error("login error", e);
-      });
-    } else if (response?.type === "error") {
-      console.error("login error", response.error);
-    }
-  }, [response]);
-
-  return (
-    <>
-      <Pressable
-        disabled={!request}
-        style={styles.defaultButton}
-        onPress={() => {
-          // showInRecents: true is required for 2fa on android
-          console.log("prompting for login");
-
-          promptAsync({ showInRecents: true });
-        }}
-      >
-        <Text style={styles.defaultButtonText}>Login with discord</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.demoButton}
-        onPress={() => {
-          (async () => {
-            await AsyncStorage.setItem("session", "demo");
-            setState((state) => ({
-              ...state,
-              page: "loading",
-              session: "demo",
-            }));
-          })();
-        }}
-      >
-        <Text style={styles.demoButtonText}>Login in demo mode</Text>
-      </Pressable>
-    </>
-  );
 }
 
 function MapPage(props: GlobalProps) {
