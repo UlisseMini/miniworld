@@ -21,6 +21,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
+import RequestLocationPage from "./components/RequestLocation";
 
 const LOCATION_TASK_NAME = "background-location-task";
 const HOST = "https://loc.uli.rocks";
@@ -393,83 +394,6 @@ function LoginPage(props: GlobalProps) {
         }}
       >
         <Text style={styles.demoButtonText}>Login in demo mode</Text>
-      </Pressable>
-    </>
-  );
-}
-
-function RequestLocationPage(props: GlobalProps) {
-  const { setState } = props;
-
-  const [canAsk, setCanAsk] = useState(false);
-  const [fgGranted, setFgGranted] = useState(false);
-
-  // Check if we can ask again
-  useEffect(() => {
-    (async () => {
-      const fg = await Location.getForegroundPermissionsAsync();
-      const bg = await Location.getBackgroundPermissionsAsync();
-
-      setCanAsk(fg.canAskAgain && bg.canAskAgain);
-      setFgGranted(fg.granted);
-    })().catch((e) => {
-      console.error("RequestLocationPage error", e);
-    });
-  }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-        Miniworld requires background location access to keep your location on
-        the map up-to-date.
-      </Text>
-
-      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-        Your location is accurate up to 3km. Your exact location never leaves
-        your device.
-      </Text>
-
-      {canAsk ? (
-        <Pressable
-          onPress={() => {
-            const permPromise = fgGranted
-              ? Location.requestBackgroundPermissionsAsync()
-              : Location.requestForegroundPermissionsAsync();
-
-            permPromise.then((p) => {
-              if (p.granted) {
-                setState((state) => ({ ...state, page: "loading" }));
-              } else {
-                setCanAsk(p.canAskAgain);
-              }
-            });
-          }}
-          style={styles.defaultButton}
-        >
-          <Text style={styles.defaultButtonText}>
-            Grant {fgGranted ? "background" : "foreground"} location permissions
-            {fgGranted && Platform.OS === "android" ? " (opens settings)" : ""}
-          </Text>
-        </Pressable>
-      ) : (
-        <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-          We can't ask for permissions again, please enable them in settings.
-          {Platform.OS === "android"
-            ? `\nSettings > Apps > MiniWorld > Permissions > Location > Allow Always`
-            : `\nSettings > MiniWorld > Location > Always`}
-        </Text>
-      )}
-
-      <Pressable
-        style={styles.demoButton}
-        onPress={async () => {
-          await AsyncStorage.setItem("location-updates-disabled", "true");
-          setState((state) => ({ ...state, page: "loading" }));
-        }}
-      >
-        <Text style={styles.demoButtonText}>
-          Continue with manual (long-press) location updating.
-        </Text>
       </Pressable>
     </>
   );
