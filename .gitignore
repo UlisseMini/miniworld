@@ -41,6 +41,8 @@ foo.py
 notes.txt
 ios
 android
+db.json
+.venv
 
 # build artifacts from eas I believe
 build-*
