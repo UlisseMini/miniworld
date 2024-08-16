@@ -49,3 +49,6 @@ build-*
 
 # firebase admin sdk. I like having it in this directory but super private
 locshare-b6025-firebase-adminsdk-bs598-12d1a0c614.json
+
+# my sillyness
+todo*
