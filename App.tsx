@@ -3,7 +3,6 @@ import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   StyleSheet,
-  Pressable,
   Text,
   View,
   Platform,
@@ -14,11 +13,8 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as AuthSession from "expo-auth-session";
 import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
-import * as Device from "expo-device";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
 import RequestLocationPage from "./components/RequestLocation";
@@ -36,7 +32,7 @@ import { HOST } from "./lib/constants";
 
 const LOCATION_TASK_NAME = "background-location-task";
 
-console.debug = () => {}; // disable debug logs
+console.debug = () => { }; // disable debug logs
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -45,58 +41,6 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
-
-// Copied from https://docs.expo.dev/push-notifications/push-notifications-setup
-async function registerForPushNotificationsAsync(): Promise<String | null> {
-  if (Platform.OS === "android") {
-    Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#FF231F7C",
-    });
-  }
-
-  if (Device.isDevice) {
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") {
-      handleRegistrationError(
-        "Permission not granted to get push token for push notification!"
-      );
-      return;
-    }
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
-    if (!projectId) {
-      handleRegistrationError("Project ID not found");
-    }
-    try {
-      const pushTokenString = (
-        await Notifications.getExpoPushTokenAsync({
-          projectId,
-        })
-      )?.data;
-      console.log(pushTokenString);
-      return pushTokenString;
-    } catch (e: unknown) {
-      handleRegistrationError(`${e}`);
-    }
-  } else {
-    console.warn("In simulator: Push notifications disabled.");
-  }
-}
-
-function handleRegistrationError(errorMessage: string) {
-  alert(errorMessage);
-  throw new Error(errorMessage);
-}
 
 const updateServer = async (locations: Location.LocationObject[]) => {
   const location = locations[0];
@@ -151,7 +95,7 @@ const getUsers = async (session: string) => {
 };
 
 const ensureLocationUpdates = async () => {
-  if ((await AsyncStorage.getItem("location-updates-disabled")) !== null) {
+  if (await AsyncStorage.getItem("location-updates-disabled") !== null) {
     console.log("location updates disabled. not starting.");
     return;
   }
@@ -181,6 +125,8 @@ async function getPage(state: RefreshableState): Promise<Page> {
 
   const locationUpdatesDisabled =
     (await AsyncStorage.getItem("location-updates-disabled")) !== null;
+  const hasAskedForPermissions =
+    await AsyncStorage.getItem('has-asked-for-permissions') === 'true';
 
   const validSession = !!session && !!users;
   const hasPermissions =
@@ -189,8 +135,9 @@ async function getPage(state: RefreshableState): Promise<Page> {
 
   console.log(`valid session?: ${validSession} perms?: ${hasPermissions}`);
 
-  if (!hasPermissions && !locationUpdatesDisabled) return "request_location";
   if (!validSession) return "login";
+
+  if (!hasPermissions && !locationUpdatesDisabled && !hasAskedForPermissions) return "request_location";
 
   return "map";
 }
@@ -200,8 +147,8 @@ async function refreshState(): Promise<RefreshableState> {
   const session = await AsyncStorage.getItem("session");
   const users = session
     ? await getUsers(session).catch((e) =>
-        console.warn(`refreshState: error getting users: ${e}`)
-      )
+      console.warn(`refreshState: error getting users: ${e}`)
+    )
     : null;
 
   return { permissions, session, users };
@@ -283,11 +230,11 @@ function MapPage(props: GlobalProps) {
   const coords = users?.[0]?.location?.coords;
   const region = coords
     ? {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        latitudeDelta: 0.922,
-        longitudeDelta: 0.421,
-      }
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      latitudeDelta: 0.922,
+      longitudeDelta: 0.421,
+    }
     : null;
 
   return (

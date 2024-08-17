@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   StyleSheet,
@@ -8,39 +8,59 @@ import {
 } from "react-native";
 import { Text, Button, Divider } from "@rneui/themed";
 import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GlobalProps } from "../lib/types";
+import { registerForPushNotificationsAsync } from "../lib/notification";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function RequestLocation({ setState }: GlobalProps) {
-  const [canAsk, setCanAsk] = useState(false);
-  const [fgGranted, setFgGranted] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const slides = [
+    {
+      title: "Miniworld Needs Location",
+      description:
+        "To put you on the map. If you decline, you'll have to update your location manually by long-pressing on the map.",
+      action: async () => {
+        const { granted } = await Location.requestForegroundPermissionsAsync();
+        return granted;
+      },
+    },
+    {
+      title: "Miniworld Needs Background Location",
+      description:
+        "So you stay up to date even when you don't open the app.\n\nThis helps us notify you and your friends when you're traveling and end up in the same city.",
+      action: async () => {
+        const { granted } = await Location.requestBackgroundPermissionsAsync();
+        return granted;
+      },
+    },
+    {
+      title: "Miniworld Needs Notification Permission",
+      description:
+        "So you can get notified when friends are visiting your city and vice versa.",
+      action: async () => {
+        const pushToken = await registerForPushNotificationsAsync();
+        return !!pushToken;
+      },
+    },
+  ];
 
-  useEffect(() => {
-    (async () => {
-      const fg = await Location.getForegroundPermissionsAsync();
-      const bg = await Location.getBackgroundPermissionsAsync();
-      setCanAsk(fg.canAskAgain && bg.canAskAgain);
-      setFgGranted(fg.granted);
-    })().catch((e) => {
-      console.error("RequestLocationPage error", e);
-    });
-  }, []);
+  const handleNext = async () => {
+    const slide = slides[currentSlide];
+    const granted = await slide.action();
 
-  const handlePermissionRequest = async () => {
-    const permPromise = fgGranted
-      ? Location.requestBackgroundPermissionsAsync()
-      : Location.requestForegroundPermissionsAsync();
-    const p = await permPromise;
-    if (p.granted) {
-      setState((state: any) => ({ ...state, page: "loading" }));
-    } else {
-      setCanAsk(p.canAskAgain);
+    // If they deny foreground location, skip to notification permission
+    if (!granted && currentSlide === 0) {
+      setCurrentSlide(2);
+      return;
     }
-  };
 
-  const handleManualUpdates = async () => {
-    await AsyncStorage.setItem("location-updates-disabled", "true");
-    setState((state: any) => ({ ...state, page: "loading" }));
+    if (currentSlide < slides.length - 1) {
+      setCurrentSlide(currentSlide + 1);
+    } else {
+      // Mark that we've asked for permissions
+      await AsyncStorage.setItem('has-asked-for-permissions', 'true');
+      setState((state: any) => ({ ...state, page: "loading" }));
+    }
   };
 
   return (
@@ -48,59 +68,23 @@ export default function RequestLocation({ setState }: GlobalProps) {
       <StatusBar barStyle="light-content" backgroundColor="#F5F5F5" />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.scrollView}>
-          <Text h1 style={styles.title}>
-            Miniworld
+          <Text style={styles.title}>
+            {slides[currentSlide].title}
           </Text>
 
-          <Text style={styles.sectionTitle}>
-            Miniworld needs background location access to:
-          </Text>
-          <View style={styles.infoSection}>
-            <Text style={styles.bulletPoint}>
-              • Keep your map location current
-            </Text>
-            <Text style={styles.bulletPoint}>
-              • Alert you when friends are nearby
-            </Text>
-            <Text style={styles.bulletPoint}>
-              • Share travel updates with friends
-            </Text>
-          </View>
-
-          <Divider style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>Your privacy is our priority:</Text>
-          <View style={styles.infoSection}>
-            <Text style={styles.bulletPoint}>
-              • Location accuracy: up to 3km
-            </Text>
-            <Text style={styles.bulletPoint}>
-              • Your exact location stays on your device
-            </Text>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Button
-              title={`Grant ${
-                fgGranted ? "Background" : "Foreground"
-              } Location Access`}
-              onPress={handlePermissionRequest}
-              buttonStyle={styles.primaryButton}
-              titleStyle={styles.primaryButtonText}
-              disabled={!canAsk}
-            />
-            <Button
-              title="Use Manual Location Updates"
-              onPress={handleManualUpdates}
-              buttonStyle={styles.secondaryButton}
-              titleStyle={styles.secondaryButtonText}
-            />
-          </View>
-
-          <Text style={styles.footer}>
-            You can adjust this setting later in the app.
+          <Text style={styles.description}>
+            {slides[currentSlide].description}
           </Text>
         </ScrollView>
+
+        <View style={styles.footer}>
+          <Button
+            title="Next"
+            onPress={handleNext}
+            buttonStyle={styles.nextButton}
+            titleStyle={styles.nextButtonText}
+          />
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -109,7 +93,7 @@ export default function RequestLocation({ setState }: GlobalProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5", // Light gray background
+    backgroundColor: "#F5F5F5",
   },
   safeArea: {
     flex: 1,
@@ -117,62 +101,47 @@ const styles = StyleSheet.create({
   scrollView: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 20,
+    paddingBottom: 100,
+    justifyContent: "center",
   },
   title: {
-    color: "#333333", // Dark gray for main title
+    color: "#333333",
     marginBottom: 20,
     fontWeight: "bold",
     fontSize: 32,
+    textAlign: "center",
   },
-  sectionTitle: {
-    color: "#4A4A4A", // Medium dark gray for section titles
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  infoSection: {
+  description: {
+    color: "#666666",
+    fontSize: 16,
+    textAlign: "center",
     marginBottom: 20,
   },
-  bulletPoint: {
-    color: "#666666", // Medium gray for bullet points
-    fontSize: 16,
-    marginBottom: 5,
-    marginLeft: 10,
-  },
   divider: {
-    backgroundColor: "#CCCCCC", // Light gray divider
+    backgroundColor: "#CCCCCC",
     marginVertical: 20,
   },
-  buttonContainer: {
-    marginTop: 20,
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#CCCCCC",
   },
-  primaryButton: {
-    backgroundColor: "#333333", // Dark gray background for primary button
+  nextButton: {
+    backgroundColor: "#333333",
     borderRadius: 25,
     paddingVertical: 15,
-    marginBottom: 10,
+    marginVertical: 15,
   },
-  primaryButtonText: {
-    color: "#FFFFFF", // White text for primary button
+  nextButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  secondaryButton: {
-    backgroundColor: "transparent",
-    borderColor: "#666666", // Medium gray border for secondary button
-    borderWidth: 2,
-    borderRadius: 25,
-    paddingVertical: 15,
-  },
-  secondaryButtonText: {
-    color: "#4A4A4A", // Medium dark gray text for secondary button
-    fontSize: 16,
-  },
-  footer: {
-    color: "#888888", // Light medium gray for footer text
-    textAlign: "center",
-    marginTop: 20,
-    fontSize: 14,
   },
 });
