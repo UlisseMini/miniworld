@@ -27,6 +27,10 @@
     "android": {
       "versionCode": 7,
       "package": "com.ulirocks.miniworld",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"
