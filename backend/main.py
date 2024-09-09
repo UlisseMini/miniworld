@@ -36,8 +36,6 @@ SUPPORTED_SERVERS = set([
 app = FastAPI()
 
 
-app.mount("/", StaticFiles(directory="static", html=True))
-
 Session = NewType("Session", str)
 UserID = NewType("UserID", str)
 
@@ -419,3 +417,6 @@ async def support():
     return HTMLResponse(
         content=f'<pre style="{PRE_STYLES}">For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
     )
+
+
+app.mount("/", StaticFiles(directory="static", html=True))
