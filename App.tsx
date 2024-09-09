@@ -407,5 +407,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: Platform.OS === "ios" ? 40 : 25,
     right: 10,
+    padding: 10,
   },
 });
