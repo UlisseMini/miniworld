@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, Dict, NewType, List
 from dotenv import load_dotenv
@@ -34,6 +35,8 @@ SUPPORTED_SERVERS = set([
 
 app = FastAPI()
 
+
+app.mount("/", StaticFiles(directory="static", html=True))
 
 Session = NewType("Session", str)
 UserID = NewType("UserID", str)
