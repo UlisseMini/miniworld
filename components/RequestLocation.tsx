@@ -16,7 +16,7 @@ export default function RequestLocation({ setState }: GlobalProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const slides = [
     {
-      title: "Miniworld Needs Location",
+      title: "Miniworld Needs Your Location",
       description:
         "To put you on the map. If you decline, you'll have to update your location manually by long-pressing on the map.",
       action: async () => {
@@ -25,9 +25,9 @@ export default function RequestLocation({ setState }: GlobalProps) {
       },
     },
     {
-      title: "Miniworld Needs Background Location",
+      title: "Miniworld Needs to Always Know Your Location",
       description:
-        "So you stay up to date even when you don't open the app.\n\nThis helps us notify you and your friends when you're traveling and end up in the same city.",
+        "So you stay up to date even when you don't open the app. This allows us to notify you and your friends when you're traveling and end up in the same city.",
       action: async () => {
         const { granted } = await Location.requestBackgroundPermissionsAsync();
         return granted;
