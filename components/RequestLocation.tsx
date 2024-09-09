@@ -33,15 +33,15 @@ export default function RequestLocation({ setState }: GlobalProps) {
         return granted;
       },
     },
-    {
-      title: "Miniworld Needs Notification Permission",
-      description:
-        "So you can get notified when friends are visiting your city and vice versa.",
-      action: async () => {
-        const pushToken = await registerForPushNotificationsAsync();
-        return !!pushToken;
-      },
-    },
+    // {
+    //   title: "Miniworld Needs Notification Permission",
+    //   description:
+    //     "So you can get notified when friends are visiting your city and vice versa.",
+    //   action: async () => {
+    //     const pushToken = await registerForPushNotificationsAsync();
+    //     return !!pushToken;
+    //   },
+    // },
   ];
 
   const handleNext = async () => {
