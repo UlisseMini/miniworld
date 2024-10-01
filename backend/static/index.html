@@ -15,6 +15,7 @@
             background: #f0f4f8;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
         }
 
@@ -23,6 +24,10 @@
             margin: 0 auto;
             padding: 2rem;
             text-align: center;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         h1 {
@@ -74,6 +79,22 @@
             margin-bottom: 0;
             color: #555;
         }
+
+        footer {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        footer a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -99,6 +120,9 @@
             </div>
         </div>
     </div>
+    <footer>
+        &copy; 2024 Ulisse Mini. All rights reserved. | <a href="/delete_data">Delete Your Data</a>
+    </footer>
 </body>
 
 </html>
