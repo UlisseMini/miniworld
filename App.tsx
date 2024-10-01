@@ -3,7 +3,6 @@ import { StatusBar } from "expo-status-bar";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   StyleSheet,
-  Pressable,
   Text,
   View,
   Platform,
@@ -14,18 +13,26 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as AuthSession from "expo-auth-session";
 import { Image } from "expo-image";
 import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
-import * as Device from "expo-device";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
+import RequestLocationPage from "./components/RequestLocation";
+import LoginPage from "./components/Login";
+import {
+  User,
+  PermissionsState,
+  RefreshableState,
+  Page,
+  GlobalState,
+  GlobalProps,
+} from "./lib/types";
+import { anonimizeLocation } from "./lib/utils";
+import { HOST } from "./lib/constants";
 
 const LOCATION_TASK_NAME = "background-location-task";
-const HOST = "https://loc.uli.rocks";
 
-console.debug = () => {}; // disable debug logs
+console.debug = () => { }; // disable debug logs
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -34,58 +41,6 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
-
-// Copied from https://docs.expo.dev/push-notifications/push-notifications-setup
-async function registerForPushNotificationsAsync(): Promise<String | null> {
-  if (Platform.OS === "android") {
-    Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#FF231F7C",
-    });
-  }
-
-  if (Device.isDevice) {
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") {
-      handleRegistrationError(
-        "Permission not granted to get push token for push notification!"
-      );
-      return;
-    }
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
-    if (!projectId) {
-      handleRegistrationError("Project ID not found");
-    }
-    try {
-      const pushTokenString = (
-        await Notifications.getExpoPushTokenAsync({
-          projectId,
-        })
-      )?.data;
-      console.log(pushTokenString);
-      return pushTokenString;
-    } catch (e: unknown) {
-      handleRegistrationError(`${e}`);
-    }
-  } else {
-    console.warn("In simulator: Push notifications disabled.");
-  }
-}
-
-function handleRegistrationError(errorMessage: string) {
-  alert(errorMessage);
-  throw new Error(errorMessage);
-}
 
 const updateServer = async (locations: Location.LocationObject[]) => {
   const location = locations[0];
@@ -111,15 +66,6 @@ const updateServer = async (locations: Location.LocationObject[]) => {
     );
 };
 
-function anonimizeLocation(
-  location: Location.LocationObject
-): Location.LocationObject {
-  // Round lat/lon to 2 decimals. Works out to 2-3km accuracy.
-  location.coords.latitude = Math.round(location.coords.latitude * 100) / 100;
-  location.coords.longitude = Math.round(location.coords.longitude * 100) / 100;
-  return location;
-}
-
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
     console.error(`${LOCATION_TASK_NAME}:`, error);
@@ -132,18 +78,6 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     updateServer(locations.map(anonimizeLocation));
   }
 });
-
-type Guild = {
-  name: string;
-  icon: string | null; // url
-};
-
-type User = {
-  name: string;
-  avatar_url: string;
-  location: Location.LocationObject;
-  common_guilds: Guild[];
-};
 
 const discovery = {
   authorizationEndpoint: "https://discord.com/api/oauth2/authorize",
@@ -161,7 +95,7 @@ const getUsers = async (session: string) => {
 };
 
 const ensureLocationUpdates = async () => {
-  if ((await AsyncStorage.getItem("location-updates-disabled")) !== null) {
+  if (await AsyncStorage.getItem("location-updates-disabled") !== null) {
     console.log("location updates disabled. not starting.");
     return;
   }
@@ -179,30 +113,6 @@ const ensureLocationUpdates = async () => {
   }
 };
 
-type Page = "loading" | "login" | "request_location" | "map";
-
-type PermissionsState = {
-  foregroundLocation?: Location.PermissionResponse;
-  backgroundLocation?: Location.PermissionResponse;
-  // TODO
-  // pushNotifications?: Notifications.PermissionResponse;
-};
-
-type RefreshableState = {
-  session: string;
-  permissions: PermissionsState;
-  users?: User[];
-};
-
-type GlobalState = RefreshableState & {
-  page: Page;
-};
-
-type GlobalProps = {
-  state: GlobalState;
-  setState: (update: (prevState: GlobalState) => GlobalState) => void;
-};
-
 async function getPermissions(): Promise<PermissionsState> {
   return {
     foregroundLocation: await Location.getForegroundPermissionsAsync(),
@@ -215,6 +125,8 @@ async function getPage(state: RefreshableState): Promise<Page> {
 
   const locationUpdatesDisabled =
     (await AsyncStorage.getItem("location-updates-disabled")) !== null;
+  const hasAskedForPermissions =
+    await AsyncStorage.getItem('has-asked-for-permissions') === 'true';
 
   const validSession = !!session && !!users;
   const hasPermissions =
@@ -223,8 +135,9 @@ async function getPage(state: RefreshableState): Promise<Page> {
 
   console.log(`valid session?: ${validSession} perms?: ${hasPermissions}`);
 
-  if (!hasPermissions && !locationUpdatesDisabled) return "request_location";
   if (!validSession) return "login";
+
+  if (!hasPermissions && !locationUpdatesDisabled && !hasAskedForPermissions) return "request_location";
 
   return "map";
 }
@@ -234,8 +147,8 @@ async function refreshState(): Promise<RefreshableState> {
   const session = await AsyncStorage.getItem("session");
   const users = session
     ? await getUsers(session).catch((e) =>
-        console.warn(`refreshState: error getting users: ${e}`)
-      )
+      console.warn(`refreshState: error getting users: ${e}`)
+    )
     : null;
 
   return { permissions, session, users };
@@ -309,172 +222,6 @@ function LoadingPage(props: GlobalProps) {
   return <Text>Loading...</Text>;
 }
 
-function LoginPage(props: GlobalProps) {
-  const { setState } = props;
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: "1232840493696680038",
-      redirectUri: AuthSession.makeRedirectUri({
-        scheme: "com.ulirocks.miniworld",
-        path: "redirect",
-      }),
-      usePKCE: true,
-      scopes: ["identify", "guilds"],
-    },
-    discovery
-  );
-
-  // Exchange discord oauth code for (backend-made) session once we have it
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { code } = response.params;
-      (async () => {
-        const p = await Location.getForegroundPermissionsAsync();
-        const autoUpdatingDisabled =
-          (await AsyncStorage.getItem("location-updates-disabled")) !== null;
-        const location =
-          p.granted && !autoUpdatingDisabled
-            ? anonimizeLocation(
-                await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Lowest,
-                })
-              )
-            : null;
-
-        const pushToken = null; // registerForPushNotificationsAsync(),
-
-        const response = await axios.post(`${HOST}/login/discord`, {
-          code: code,
-          code_verifier: request.codeVerifier,
-          location: location,
-          pushToken: pushToken,
-        });
-        const session = response.data.session;
-        const users = response.data.users;
-
-        // it's important we set the session before the state since
-        // the loading page refreshes the session from storage.
-        await AsyncStorage.setItem("session", session);
-        setState((state) => ({ ...state, session, users, page: "loading" }));
-      })().catch((e) => {
-        console.error("login error", e);
-      });
-    } else if (response?.type === "error") {
-      console.error("login error", response.error);
-    }
-  }, [response]);
-
-  return (
-    <>
-      <Pressable
-        disabled={!request}
-        style={styles.defaultButton}
-        onPress={() => {
-          // showInRecents: true is required for 2fa on android
-          console.log("prompting for login");
-
-          promptAsync({ showInRecents: true });
-        }}
-      >
-        <Text style={styles.defaultButtonText}>Login with discord</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.demoButton}
-        onPress={() => {
-          (async () => {
-            await AsyncStorage.setItem("session", "demo");
-            setState((state) => ({
-              ...state,
-              page: "loading",
-              session: "demo",
-            }));
-          })();
-        }}
-      >
-        <Text style={styles.demoButtonText}>Login in demo mode</Text>
-      </Pressable>
-    </>
-  );
-}
-
-function RequestLocationPage(props: GlobalProps) {
-  const { setState } = props;
-
-  const [canAsk, setCanAsk] = useState(false);
-  const [fgGranted, setFgGranted] = useState(false);
-
-  // Check if we can ask again
-  useEffect(() => {
-    (async () => {
-      const fg = await Location.getForegroundPermissionsAsync();
-      const bg = await Location.getBackgroundPermissionsAsync();
-
-      setCanAsk(fg.canAskAgain && bg.canAskAgain);
-      setFgGranted(fg.granted);
-    })().catch((e) => {
-      console.error("RequestLocationPage error", e);
-    });
-  }, []);
-
-  return (
-    <>
-      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-        Miniworld requires background location access to keep your location on
-        the map up-to-date.
-      </Text>
-
-      <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-        Your location is accurate up to 3km. Your exact location never leaves
-        your device.
-      </Text>
-
-      {canAsk ? (
-        <Pressable
-          onPress={() => {
-            const permPromise = fgGranted
-              ? Location.requestBackgroundPermissionsAsync()
-              : Location.requestForegroundPermissionsAsync();
-
-            permPromise.then((p) => {
-              if (p.granted) {
-                setState((state) => ({ ...state, page: "loading" }));
-              } else {
-                setCanAsk(p.canAskAgain);
-              }
-            });
-          }}
-          style={styles.defaultButton}
-        >
-          <Text style={styles.defaultButtonText}>
-            Grant {fgGranted ? "background" : "foreground"} location permissions
-            {fgGranted && Platform.OS === "android" ? " (opens settings)" : ""}
-          </Text>
-        </Pressable>
-      ) : (
-        <Text style={{ fontSize: 20, textAlign: "center", margin: 10 }}>
-          We can't ask for permissions again, please enable them in settings.
-          {Platform.OS === "android"
-            ? `\nSettings > Apps > MiniWorld > Permissions > Location > Allow Always`
-            : `\nSettings > MiniWorld > Location > Always`}
-        </Text>
-      )}
-
-      <Pressable
-        style={styles.demoButton}
-        onPress={async () => {
-          await AsyncStorage.setItem("location-updates-disabled", "true");
-          setState((state) => ({ ...state, page: "loading" }));
-        }}
-      >
-        <Text style={styles.demoButtonText}>
-          Continue with manual (long-press) location updating.
-        </Text>
-      </Pressable>
-    </>
-  );
-}
-
 function MapPage(props: GlobalProps) {
   const { users } = props.state;
 
@@ -483,11 +230,11 @@ function MapPage(props: GlobalProps) {
   const coords = users?.[0]?.location?.coords;
   const region = coords
     ? {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        latitudeDelta: 0.922,
-        longitudeDelta: 0.421,
-      }
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      latitudeDelta: 0.922,
+      longitudeDelta: 0.421,
+    }
     : null;
 
   return (
@@ -660,5 +407,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: Platform.OS === "ios" ? 40 : 25,
     right: 10,
+    padding: 10,
   },
 });

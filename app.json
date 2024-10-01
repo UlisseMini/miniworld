@@ -26,11 +26,11 @@
     },
     "android": {
       "versionCode": 7,
+      "package": "com.ulirocks.miniworld",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ulirocks.miniworld",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyDr6Lm5DiuTBPuCcKptyq8udlKsjCF0Y2Q"

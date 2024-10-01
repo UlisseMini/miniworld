@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Cookie, FastAPI, Depends, Header, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional, Dict, NewType, List
+from typing import Optional, Dict, NewType, List, Tuple
 from dotenv import load_dotenv
 from traceback import print_exc
 from geopy.distance import geodesic
@@ -14,6 +14,7 @@ import os
 import json
 import random
 import html
+import urllib.parse
 
 load_dotenv()
 
@@ -34,9 +35,6 @@ SUPPORTED_SERVERS = set([
 
 
 app = FastAPI()
-
-
-app.mount("/", StaticFiles(directory="static", html=True))
 
 Session = NewType("Session", str)
 UserID = NewType("UserID", str)
@@ -190,44 +188,50 @@ setup_demo_user(db)
 
 print(f"Loaded {len(db.user_id)} sessions and {len(db.users)} users from disk.")
 
-# get session from Authorization header
-def get_session(authorization: str = Header(None)) -> Session:
-    if authorization is None:
-        print("Authorization header is missing")
-        raise HTTPException(status_code=401, detail="Authorization header is missing")
+# get session from Authorization header or cookie
+from fastapi import Depends
+from typing import Optional
+
+def try_get_session(authorization: Optional[str] = Header(None), session: Optional[str] = Cookie(None)) -> Optional[Session]:
+    if authorization is None and session is None:
+        print("Authorization header and session cookie are missing")
+        return None
+    
     try:
-        # Assuming session token is passed directly as Authorization header, for now
-        # TODO: Should probably switch to Bearer token format, that's more standard.
-        session = Session(authorization)
+        session = Session(authorization or session)
         user_id = db.user_id.get(session)
         if user_id:
             auth = db.users[user_id].auth
             time_till_expiry = auth.created_at + auth.expires_in - int(time.time())
             if time_till_expiry < 0:
-                # TODO: Attempt to refresh using refresh token
                 print("Session expired. clearing session.")
                 del db.user_id[session]
-                raise HTTPException(status_code=401, detail="Session expired")
-
+                return None
             return session
         else:
             print(f"Session {session} not in db.user_id")
-            raise HTTPException(status_code=401, detail="Invalid session")
+            return None
     except Exception as e:
-        # re-raise HTTPException
-        if isinstance(e, HTTPException):
-            raise e
-
         print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        return None
 
+def get_session(session: Optional[Session] = Depends(try_get_session)) -> Session:
+    if session is None:
+        raise HTTPException(status_code=401, detail="Authorization header or session cookie is required")
+    return session
 
 
 def get_user_id(session: Session = Depends(get_session)) -> UserID:
     return db.user_id[session]
 
+def try_get_user_id(session: Session = Depends(try_get_session)) -> Optional[UserID]:
+    return db.user_id.get(session) if session is not None else None
+
 def get_user(user_id = Depends(get_user_id)) -> UserData:
     return db.users[user_id]
+
+def try_get_user(user_id: UserID = Depends(try_get_user_id)) -> Optional[UserData]:
+    return db.users.get(user_id) if user_id is not None else None
 
 
 @app.post("/update")
@@ -281,6 +285,33 @@ class LoginRequest(BaseModel):
     pushToken: Optional[str] = None
 
 
+def create_or_update_user(user_info: dict, auth: DiscordAuth, guilds: List[dict], location: Optional[Location] = None, push_token: Optional[str] = None) -> Tuple[UserData, Session]:
+    duser = DiscordUser(
+        id=UserID(user_info["id"]),
+        username=user_info["username"],
+        avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
+        guilds=[GuildInfo(**g) for g in guilds],
+    )
+
+    session = Session(secrets.token_urlsafe(16))
+    db.user_id[session] = duser.id
+
+    supported_guild_ids = [gid for gid in SUPPORTED_SERVERS if gid in [g["id"] for g in guilds]]
+    settings = Settings(guild_ids=supported_guild_ids)
+
+    user = UserData(
+        duser=duser,
+        location=location,
+        auth=auth,
+        settings=settings,
+        pushToken=push_token,
+    )
+    db.users[user.id] = user
+    db.save()
+
+    return user, session
+
+
 @app.post("/login/discord")
 def login(request: LoginRequest):
     # given code from oauth2, get the access token
@@ -328,45 +359,85 @@ def login(request: LoginRequest):
         )
     guilds = resp.json()
 
-    # Create discord user
-    duser = DiscordUser(
-        id=UserID(user_info["id"]),
-        username=user_info["username"],
-        avatar_url=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
-        guilds=[GuildInfo(**g) for g in guilds],
-    )
+    user, session = create_or_update_user(user_info, auth, guilds, request.location, request.pushToken)
 
-    # Create a new session token and store everything
-    session = Session(secrets.token_urlsafe(16))
-    db.user_id[session] = duser.id
-
-    # TODO: once /settings page is used by frontend we must get rid of these defaults
-    # and use [] and {} instead.
-
-    supported_guild_ids = [gid for gid in SUPPORTED_SERVERS if gid in [g["id"] for g in guilds]]
-    settings = Settings(guild_ids=supported_guild_ids)
-
-    # Store the rest of the user data, like their discord tokens, guilds, etc.
-    user = UserData(
-        duser=duser,
-        location=request.location,
-        auth=auth,
-        settings=settings,
-        pushToken=request.pushToken,
-    )
-    db.users[user.id] = user
-    db.save()
-
-    # pass users too so frontend doesn't have to make another request.
     return {"status": "ok", "session": str(session), "users": get_users(user), "guilds": guilds}
 
-
-
 @app.get("/login/discord")
-def login_discord_html():
-    return HTMLResponse("""
-        <h1>Login</h1>
-    """)
+def login_discord(return_to: Optional[str] = None):
+    redirect_uri = f"{os.environ.get('BASE_URL', 'http://localhost:8000')}/discord-callback"
+    encoded_return_to = urllib.parse.quote_plus(return_to) if return_to else ""
+    oauth_url = f"https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope=identify%20guilds&state={encoded_return_to}"
+    return RedirectResponse(url=oauth_url)
+
+
+@app.get("/discord-callback")
+def discord_callback(code: str, state: Optional[str] = None):
+    redirect_uri = f"{os.environ.get('BASE_URL', 'http://localhost:8000')}/discord-callback"
+    return_to = urllib.parse.unquote_plus(state) if state else None
+
+    # Exchange code for token
+    token_response = httpx.post("https://discord.com/api/oauth2/token", data={
+        "client_id": DISCORD_CLIENT_ID,
+        "client_secret": DISCORD_CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+    })
+    
+    if token_response.status_code != 200:
+        raise HTTPException(status_code=400, detail=f"Failed to get token: {token_response.text}")
+    
+    token_data = token_response.json()
+    access_token = token_data["access_token"]
+    
+    # Fetch user info
+    user_response = httpx.get("https://discord.com/api/users/@me", headers={
+        "Authorization": f"Bearer {access_token}"
+    })
+    
+    if user_response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to get user info")
+    
+    user_info = user_response.json()
+    
+    # Fetch guilds
+    guilds_response = httpx.get("https://discord.com/api/users/@me/guilds", headers={
+        "Authorization": f"Bearer {access_token}"
+    })
+    
+    if guilds_response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to get user guilds")
+    
+    guilds = guilds_response.json()
+    
+    auth = DiscordAuth(**token_data, created_at=int(time.time()))
+    
+    user, session = create_or_update_user(user_info, auth, guilds)
+    print(f"User {user.id} created/updated and logged in with session {session}")
+    
+    # Create an intermediate page to set the cookie properly
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Redirecting...</title>
+        <script>
+            window.onload = function() {{
+                window.location.href = "{return_to or '/'}";
+            }};
+        </script>
+    </head>
+    <body>
+        <p>Redirecting you... If nothing happens click <a href="{return_to or '/'}">here</a>.</p>
+    </body>
+    </html>
+    """
+    
+    response = HTMLResponse(content=html_content)
+    response.set_cookie(key="session", value=str(session), httponly=True, secure=True, samesite="strict")
+    return response
+
 
 
 @app.post("/settings")
@@ -388,21 +459,66 @@ def settings(request: Settings, user: UserData = Depends(get_user)):
     return {"status": "ok"}
 
 
-PRE_STYLES = "white-space: pre-wrap; max-width: 70ch; line-height: 1.3;"
+PRE_STYLES = """
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.6;
+"""
 
+BUTTON_STYLES = """
+    background-color: #f44336;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+"""
+
+CANCEL_BUTTON_STYLES = """
+    background-color: #f0f0f0;
+    color: #333;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+    margin-left: 10px;
+"""
 
 @app.get("/delete_data")
+def delete_data_form(user: Optional[UserData] = Depends(try_get_user)):
+    if user is None:
+        print("DDF: User is None, redirecting to login")
+        return RedirectResponse("/login/discord?return_to=/delete_data")
+
+    return HTMLResponse(f'''
+        <form action="/delete_data" method="post" style="{PRE_STYLES}">
+            <h2>Delete Your Data</h2>
+            <p>Are you sure you want to delete all your data, {user.duser.username}?
+            This action cannot be undone.</p>
+            <input type="submit" value="Delete my data" style="{BUTTON_STYLES}">
+            <a href="/" style="{CANCEL_BUTTON_STYLES}">Cancel</a>
+        </form>
+    ''')
+
+@app.post("/delete_data")
 def delete_data(
-    # user: UserData = Depends(get_user),
-    # session: Session = Depends(get_session)
+    user: Optional[UserData] = Depends(try_get_user),
+    session: Optional[Session] = Depends(try_get_session)
 ):
-    return HTMLResponse(f'<pre style="{PRE_STYLES}">To request data deletion email us <a href="mailto:{EMAIL}">here</a>.</pre>')
+    if user is None or session is None:
+        print("DDP: User is None, redirecting to login")
+        return RedirectResponse("/login/discord?return_to=/delete_data")
 
-    # del db.users[user.id]
-    # del db.user_id[session]
-    # db.save()
-    # return HTMLResponse('<h1 style="font-family: monospace">All user data deleted. You may close this tab.</h1>')
-
+    del db.users[user.id]
+    del db.user_id[session]
+    db.save()
+    return HTMLResponse(f'<h1 style="font-family: monospace">All user data for {user.duser.username} deleted. You may close this tab.</h1>')
 
 
 PRIVACY_POLICY = open("privacy-policy.txt", "r").read()
@@ -419,3 +535,6 @@ async def support():
     return HTMLResponse(
         content=f'<pre style="{PRE_STYLES}">For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
     )
+
+
+app.mount("/", StaticFiles(directory="static", html=True))
