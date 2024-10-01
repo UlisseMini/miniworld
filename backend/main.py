@@ -493,24 +493,37 @@ CANCEL_BUTTON_STYLES = """
 
 @app.get("/delete_data")
 def delete_data_form(user: Optional[UserData] = Depends(try_get_user)):
-    if user is None:
-        return HTMLResponse(f'''
-            <div style="{PRE_STYLES}">
-                <h2>Delete Your Data</h2>
-                <p>You need to be logged in to delete your data.</p>
-                <a href="/login/discord?return_to=/delete_data" style="{BUTTON_STYLES}">Login with Discord</a>
-            </div>
-        ''')
+    content = f'''
+        <div style="{PRE_STYLES}">
+            <h1>Delete Your Data</h1>
+            <p>This will delete all your data from Miniworld. This action cannot be undone. All data will be deleted. In particular:</p>
+            <ul>
+                <li>User profile information</li>
+                <li>Location history</li>
+                <li>Discord guilds information</li>
+                <li>Settings and preferences</li>
+            </ul>
+    '''
 
-    return HTMLResponse(f'''
-        <form action="/delete_data" method="post" style="{PRE_STYLES}">
-            <h2>Delete Your Data</h2>
+    if user is None:
+        content += f'''
+            <p>You need to be logged in to delete your data. Click the button below to log in and proceed with data deletion.</p>
+            <a href="/login/discord?return_to=/delete_data" style="{BUTTON_STYLES}">Login with Discord</a>
+            <a href="/" style="{CANCEL_BUTTON_STYLES}">Cancel</a>
+        </div>
+        '''
+        return HTMLResponse(content)
+
+    content += f'''
+        <form action="/delete_data" method="post">
             <p>Are you sure you want to delete all your data, {user.duser.username}?
             This action cannot be undone.</p>
             <input type="submit" value="Delete my data" style="{BUTTON_STYLES}">
             <a href="/" style="{CANCEL_BUTTON_STYLES}">Cancel</a>
         </form>
-    ''')
+        </div>
+    '''
+    return HTMLResponse(content)
 
 @app.post("/delete_data")
 def delete_data(
