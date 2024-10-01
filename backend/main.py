@@ -475,6 +475,7 @@ BUTTON_STYLES = """
     border-radius: 4px;
     cursor: pointer;
     font-size: 16px;
+    text-decoration: none;
 """
 
 CANCEL_BUTTON_STYLES = """
@@ -493,8 +494,13 @@ CANCEL_BUTTON_STYLES = """
 @app.get("/delete_data")
 def delete_data_form(user: Optional[UserData] = Depends(try_get_user)):
     if user is None:
-        print("DDF: User is None, redirecting to login")
-        return RedirectResponse("/login/discord?return_to=/delete_data")
+        return HTMLResponse(f'''
+            <div style="{PRE_STYLES}">
+                <h2>Delete Your Data</h2>
+                <p>You need to be logged in to delete your data.</p>
+                <a href="/login/discord?return_to=/delete_data" style="{BUTTON_STYLES}">Login with Discord</a>
+            </div>
+        ''')
 
     return HTMLResponse(f'''
         <form action="/delete_data" method="post" style="{PRE_STYLES}">
@@ -512,8 +518,7 @@ def delete_data(
     session: Optional[Session] = Depends(try_get_session)
 ):
     if user is None or session is None:
-        print("DDP: User is None, redirecting to login")
-        return RedirectResponse("/login/discord?return_to=/delete_data")
+        return RedirectResponse("/delete_data_form")
 
     del db.users[user.id]
     del db.user_id[session]
