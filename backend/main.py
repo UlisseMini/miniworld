@@ -544,14 +544,14 @@ PRIVACY_POLICY = open("privacy-policy.txt", "r").read()
 @app.get("/privacy-policy")
 async def privacy_policy():
     return HTMLResponse(
-        content=f'<pre style="{PRE_STYLES}">' + html.escape(PRIVACY_POLICY) + '</pre>'
+        content=f'<pre style="max-width: 70ch; white-space: pre-wrap; line-height: 1.5;">' + html.escape(PRIVACY_POLICY) + '</pre>'
     )
 
 
 @app.get("/support")
 async def support():
     return HTMLResponse(
-        content=f'<pre style="{PRE_STYLES}">For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
+        content=f'<pre style="max-width: 70ch;">For support contact us at <a href="mailto:{EMAIL}">{EMAIL}</a></pre>'
     )
 
 
