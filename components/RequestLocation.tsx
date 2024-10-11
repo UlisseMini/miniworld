@@ -49,8 +49,9 @@ export default function RequestLocation({ setState }: GlobalProps) {
     const granted = await slide.action();
 
     // If they deny foreground location, skip to notification permission
-    if (!granted && currentSlide === 0) {
-      setCurrentSlide(2);
+    // (If we have notificaitons enabled in our build)
+    if (!granted && currentSlide === 0 && slides.length > 2) {
+      setCurrentSlide(slides.length - 1);
       return;
     }
 
