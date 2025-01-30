@@ -10,6 +10,7 @@ import {
   Alert,
   TouchableOpacity,
   Switch,
+  ScrollView,
 } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
@@ -359,6 +360,8 @@ function UserMarker(props: { user: User }) {
 
 function SettingsPage(props: GlobalProps) {
   const [autoUpdate, setAutoUpdate] = useState(true);
+  const currentUser = props.state.users?.[0];  // Current user is always first
+  const guilds = currentUser?.common_guilds || [];
 
   // Load initial state
   useEffect(() => {
@@ -393,29 +396,66 @@ function SettingsPage(props: GlobalProps) {
         <Text style={styles.settingsTitle}>Settings</Text>
       </View>
 
-      <View style={styles.settingsList}>
-        <View style={styles.settingsItem}>
-          <View style={styles.settingsItemLeft}>
-            <MaterialIcons name="my-location" size={24} color="black" />
-            <Text style={styles.settingsItemText}>Update location automatically</Text>
+      <ScrollView style={styles.settingsList}>
+        <View style={styles.settingsSection}>
+          <Text style={styles.settingsSectionTitle}>Location Updates</Text>
+          <View style={styles.settingsItem}>
+            <View style={styles.settingsItemLeft}>
+              <MaterialIcons name="my-location" size={24} color="black" />
+              <Text style={styles.settingsItemText}>Update location automatically</Text>
+            </View>
+            <Switch
+              value={autoUpdate}
+              onValueChange={toggleAutoUpdate}
+            />
           </View>
-          <Switch
-            value={autoUpdate}
-            onValueChange={toggleAutoUpdate}
-          />
         </View>
 
-        <TouchableOpacity
-          style={[styles.settingsItem, styles.settingsItemMargin]}
-          onPress={async () => {
-            await AsyncStorage.clear();
-            props.setState((state) => ({ ...state, page: "loading" }));
-          }}
-        >
-          <MaterialIcons name="logout" size={24} color="black" />
-          <Text style={styles.settingsItemText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={[styles.settingsSection, styles.settingsSectionMargin]}>
+          <Text style={styles.settingsSectionTitle}>Share Location With</Text>
+          {guilds.map((guild, index) => (
+            <View
+              key={guild.name}
+              style={[
+                styles.settingsItem,
+                index > 0 && styles.settingsItemMargin
+              ]}
+            >
+              <View style={styles.settingsItemLeft}>
+                {guild.icon ? (
+                  <Image
+                    source={guild.icon}
+                    style={styles.guildIcon}
+                  />
+                ) : (
+                  <MaterialIcons name="group" size={24} color="black" />
+                )}
+                <Text style={styles.settingsItemText}>{guild.name}</Text>
+              </View>
+              <Switch
+                value={true}
+                onValueChange={() => { }}
+              />
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.settingsSection, styles.settingsSectionMargin]}>
+          <Text style={styles.settingsSectionTitle}>Account</Text>
+          <TouchableOpacity
+            style={[styles.settingsItem, styles.logoutButton]}
+            onPress={async () => {
+              await AsyncStorage.clear();
+              props.setState((state) => ({ ...state, page: "loading" }));
+            }}
+          >
+            <View style={styles.settingsItemLeft}>
+              <MaterialIcons name="logout" size={24} color="#FF3B30" />
+              <Text style={[styles.settingsItemText, styles.logoutText]}>Logout</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -467,10 +507,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   logoutButton: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 40 : 25,
-    right: 10,
-    padding: 10,
+    backgroundColor: '#FFE5E5',
+  },
+  logoutText: {
+    color: '#FF3B30',
+    fontWeight: '500',
   },
   settingsButton: {
     position: "absolute",
@@ -519,5 +560,25 @@ const styles = StyleSheet.create({
   settingsItemText: {
     marginLeft: 16,
     fontSize: 16,
+  },
+  settingsSection: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 16,
+  },
+  settingsSectionMargin: {
+    marginTop: 24,
+  },
+  settingsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  guildIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
 });

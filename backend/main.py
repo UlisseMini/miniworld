@@ -22,18 +22,6 @@ DISCORD_CLIENT_SECRET = os.environ["DISCORD_CLIENT_SECRET"]
 DISCORD_CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
 EMAIL = 'uli@miniworld.app'
 
-# Servers we support in beta
-DEMO_GUILD_ID = "0000000000000000000"
-DEMO_GUILD = {"id": DEMO_GUILD_ID, "name": "Demo Guild", "icon": None}
-
-SUPPORTED_SERVERS = set([
-    # '1147040380672544808', # lost ones
-    '1014436790251290624', # agents of change
-    '982436897571881061', # atlas fellows
-    DEMO_GUILD_ID, # demo guild id
-])
-
-
 app = FastAPI()
 
 Session = NewType("Session", str)
@@ -143,12 +131,14 @@ def create_demo_user(name: str, id: str) -> UserData:
     dlat = random.uniform(-0.05, 0.05)
     dlon = random.uniform(-0.05, 0.05)
 
+    demo_guild = {"id": "0", "name": "Demo Guild", "icon": None}
+
     return UserData(
         duser=DiscordUser(
             id=UserID(id),
             username=name,
             avatar_url=f"https://cdn.discordapp.com/embed/avatars/{id}.png",
-            guilds=[GuildInfo(**DEMO_GUILD)],
+            guilds=[GuildInfo(**demo_guild)],
         ),
         location=Location(
             coords=Coords(
@@ -158,12 +148,11 @@ def create_demo_user(name: str, id: str) -> UserData:
             timestamp=0,
         ),
         settings=Settings(
-            guild_ids=[DEMO_GUILD_ID],
-            privacy_margin={},
+            guild_ids=["0"],  # demo guild id
         ),
         auth=DiscordAuth(
             access_token="demo",
-            expires_in=int(1e20), # never
+            expires_in=int(1e20),  # never
             refresh_token="demo",
             scope="demo",
             token_type="demo",
@@ -296,8 +285,8 @@ def create_or_update_user(user_info: dict, auth: DiscordAuth, guilds: List[dict]
     session = Session(secrets.token_urlsafe(16))
     db.user_id[session] = duser.id
 
-    supported_guild_ids = [gid for gid in SUPPORTED_SERVERS if gid in [g["id"] for g in guilds]]
-    settings = Settings(guild_ids=supported_guild_ids)
+    guild_ids = [g["id"] for g in guilds]
+    settings = Settings(guild_ids=guild_ids)
 
     user = UserData(
         duser=duser,
@@ -442,9 +431,6 @@ def discord_callback(code: str, state: Optional[str] = None):
 
 @app.post("/settings")
 def settings(request: Settings, user: UserData = Depends(get_user)):
-    if not set(request.guild_ids).issubset(SUPPORTED_SERVERS):
-        raise HTTPException(status_code=400, detail=f"At least one guild id is not supported yet")
-
     our_guilds = set(g.id for g in user.duser.guilds)
     if not set(request.guild_ids).issubset(our_guilds):
         raise HTTPException(status_code=400, detail=f"At least one guild id not in user's guilds")
