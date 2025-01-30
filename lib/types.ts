@@ -13,12 +13,17 @@ export type DiscordUser = {
   guilds: Guild[];
 };
 
+export type Settings = {
+  guild_sharing: { [guildId: string]: boolean };
+};
+
 export type User = {
   name: string;
   avatar_url: string;
   location: Location.LocationObject;
   common_guilds: Guild[];
   duser: DiscordUser;
+  settings: Settings;
 };
 
 export type PermissionsState = {

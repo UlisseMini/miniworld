@@ -337,7 +337,6 @@ function UserMarker(props: { user: User }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const user = props.user;
 
-  // Get default avatar number based on user id
   const defaultAvatarNumber = user.name ? parseInt(user.name.charCodeAt(0).toString().slice(-1)) % 5 : 0;
   const avatarUrl = user.avatar_url || `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
 
@@ -346,7 +345,7 @@ function UserMarker(props: { user: User }) {
       tracksViewChanges={tracksViewChanges}
       coordinate={user.location.coords}
       title={`${user.name}`}
-      description={`common servers: ${user.common_guilds
+      description={`servers: ${user.duser.guilds
         .map((g) => g.name)
         .join(", ")}`}
     >
@@ -366,39 +365,42 @@ function SettingsPage(props: GlobalProps) {
   const [autoUpdate, setAutoUpdate] = useState(true);
   const currentUser = props.state.users?.[0];
   const guilds = currentUser?.duser?.guilds || [];
-  const [enabledGuilds, setEnabledGuilds] = useState<Set<string>>(
-    new Set(currentUser?.common_guilds.map(g => g.id) || [])
-  );
-
-  // Update enabled guilds when user data changes
-  useEffect(() => {
-    if (currentUser?.common_guilds) {
-      setEnabledGuilds(new Set(currentUser.common_guilds.map(g => g.id)));
-    }
-  }, [currentUser?.common_guilds]);
+  const guildSharing = currentUser?.settings?.guild_sharing || {};
 
   const toggleGuild = async (guildId: string) => {
-    const newEnabledGuilds = new Set(enabledGuilds);
-    if (enabledGuilds.has(guildId)) {
-      newEnabledGuilds.delete(guildId);
-    } else {
-      newEnabledGuilds.add(guildId);
-    }
-    setEnabledGuilds(newEnabledGuilds);
+    if (!currentUser) return;
 
-    // Update server
+    const newGuildSharing = {
+      ...guildSharing,
+      [guildId]: !guildSharing[guildId]
+    };
+
     try {
       await axios.post(`${HOST}/settings`, {
-        guild_ids: Array.from(newEnabledGuilds)
+        guild_sharing: newGuildSharing
       }, {
         headers: {
           Authorization: props.state.session
         }
       });
+
+      // Optimistically update the UI
+      props.setState(state => ({
+        ...state,
+        users: state.users?.map(user =>
+          user === currentUser
+            ? {
+              ...user,
+              settings: {
+                ...user.settings,
+                guild_sharing: newGuildSharing
+              }
+            }
+            : user
+        )
+      }));
     } catch (error) {
       console.error('Failed to update settings:', error);
-      // Revert on failure
-      setEnabledGuilds(new Set(currentUser?.common_guilds.map(g => g.id) || []));
     }
   };
 
@@ -477,7 +479,7 @@ function SettingsPage(props: GlobalProps) {
                 <Text style={styles.settingsItemText}>{guild.name}</Text>
               </View>
               <Switch
-                value={enabledGuilds.has(guild.id)}
+                value={guildSharing[guild.id] ?? false}
                 onValueChange={() => toggleGuild(guild.id)}
               />
             </View>

@@ -60,23 +60,9 @@ class GuildInfo(BaseModel):
 
 class Settings(BaseModel):
     """
-    User settings. Conceptually 1-1 to a settings screen on the app, except
-    we validate the user is in the guilds they want to share their location with,
-    and that the privacy margin is reasonable.
+    User settings. Map of guild IDs to whether location sharing is enabled for that guild.
     """
-
-    # guild_ids we want to share our location with
-    guild_ids: List[str]
-
-
-class LocatedUser(BaseModel):
-    "Sent to the frontend, contains everything necessary to display a user."
-    name: str
-    avatar_url: str
-    location: Location
-    # Guilds in common with the current user
-    common_guilds: List[GuildInfo] = []
-    duser: "DiscordUser"
+    guild_sharing: Dict[str, bool] = {}
 
 
 class DiscordUser(BaseModel):
@@ -84,6 +70,16 @@ class DiscordUser(BaseModel):
     username: str
     avatar_url: Optional[str]
     guilds: List[GuildInfo]
+
+
+class LocatedUser(BaseModel):
+    "Sent to the frontend, contains everything necessary to display a user."
+    name: str
+    avatar_url: str
+    location: Location
+    common_guilds: List[GuildInfo] = []
+    duser: DiscordUser
+    settings: Settings
 
 
 class UserData(BaseModel):
@@ -149,7 +145,7 @@ def create_demo_user(name: str, id: str) -> UserData:
             timestamp=0,
         ),
         settings=Settings(
-            guild_ids=["0"],  # demo guild id
+            guild_sharing={"0": True},  # demo guild id
         ),
         auth=DiscordAuth(
             access_token="demo",
@@ -241,8 +237,9 @@ def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
             name=u.duser.username,
             avatar_url=u.duser.avatar_url or "https://cdn.discordapp.com/embed/avatars/0.png",
             location=u.location,
-            common_guilds=[g for g in u.duser.guilds if g.id in user.settings.guild_ids],
+            common_guilds=[g for g in u.duser.guilds if g.id in user.settings.guild_sharing and user.settings.guild_sharing[g.id]],
             duser=u.duser,
+            settings=u.settings,
         )
         for u in db.users.values()
         if u.location is not None
@@ -283,8 +280,10 @@ def create_or_update_user(user_info: dict, auth: DiscordAuth, guilds: List[dict]
     session = Session(secrets.token_urlsafe(16))
     db.user_id[session] = duser.id
 
-    guild_ids = [g["id"] for g in guilds]
-    settings = Settings(guild_ids=guild_ids)
+    # Initialize all guilds as enabled
+    settings = Settings(
+        guild_sharing={g["id"]: True for g in guilds}
+    )
 
     user = UserData(
         duser=duser,
@@ -430,11 +429,11 @@ def discord_callback(code: str, state: Optional[str] = None):
 @app.post("/settings")
 def settings(request: Settings, user: UserData = Depends(get_user)):
     our_guilds = set(g.id for g in user.duser.guilds)
-    if not set(request.guild_ids).issubset(our_guilds):
+    if not set(request.guild_sharing.keys()).issubset(our_guilds):
         raise HTTPException(status_code=400, detail=f"At least one guild id not in user's guilds")
 
-    if any(v < 0 or v > 10000 for v in request.privacy_margin.values()):
-        raise HTTPException(status_code=400, detail=f"Invalid privacy margin. not in [0, 10000]")
+    if any(not isinstance(v, bool) for v in request.guild_sharing.values()):
+        raise HTTPException(status_code=400, detail=f"Invalid guild sharing format. All values must be boolean")
 
     # good settings! keep them
     db.users[user.id].settings = request
