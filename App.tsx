@@ -8,6 +8,8 @@ import {
   Platform,
   AppState,
   Alert,
+  TouchableOpacity,
+  Switch,
 } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
@@ -186,12 +188,13 @@ export default function Index() {
   }, []);
 
   // load the correct page
-  const props = { state, setState: setState };
+  const props = { state, setState };
   const pageComponent = {
     loading: () => <LoadingPage {...props} />,
     login: () => <LoginPage {...props} />,
     request_location: () => <RequestLocationPage {...props} />,
     map: () => <MapPage {...props} />,
+    settings: () => <SettingsPage {...props} />,
   }[state.page]();
 
   // render the page
@@ -312,14 +315,11 @@ function MapPage(props: GlobalProps) {
       </MapView>
 
       <MaterialIcons
-        name="logout"
+        name="settings"
         size={24}
         color="black"
-        style={styles.logoutButton}
-        onPress={async () => {
-          await AsyncStorage.clear();
-          props.setState((state) => ({ ...state, page: "loading" }));
-        }}
+        style={styles.settingsButton}
+        onPress={() => props.setState(state => ({ ...state, page: 'settings' }))}
       />
     </>
   );
@@ -354,6 +354,69 @@ function UserMarker(props: { user: User }) {
         />
       </View>
     </Marker>
+  );
+}
+
+function SettingsPage(props: GlobalProps) {
+  const [autoUpdate, setAutoUpdate] = useState(true);
+
+  // Load initial state
+  useEffect(() => {
+    AsyncStorage.getItem("location-updates-disabled")
+      .then(disabled => setAutoUpdate(!disabled))
+      .catch(console.error);
+  }, []);
+
+  const toggleAutoUpdate = async (value: boolean) => {
+    setAutoUpdate(value);
+    if (value) {
+      // Enable automatic updates
+      await AsyncStorage.removeItem("location-updates-disabled");
+      await ensureLocationUpdates();
+    } else {
+      // Disable automatic updates
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => null);
+      await AsyncStorage.setItem("location-updates-disabled", "true");
+    }
+  };
+
+  return (
+    <View style={styles.settingsContainer}>
+      <View style={styles.settingsHeader}>
+        <MaterialIcons
+          name="arrow-back"
+          size={24}
+          color="black"
+          onPress={() => props.setState(state => ({ ...state, page: 'map' }))}
+          style={styles.backButton}
+        />
+        <Text style={styles.settingsTitle}>Settings</Text>
+      </View>
+
+      <View style={styles.settingsList}>
+        <View style={styles.settingsItem}>
+          <View style={styles.settingsItemLeft}>
+            <MaterialIcons name="my-location" size={24} color="black" />
+            <Text style={styles.settingsItemText}>Update location automatically</Text>
+          </View>
+          <Switch
+            value={autoUpdate}
+            onValueChange={toggleAutoUpdate}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.settingsItem, styles.settingsItemMargin]}
+          onPress={async () => {
+            await AsyncStorage.clear();
+            props.setState((state) => ({ ...state, page: "loading" }));
+          }}
+        >
+          <MaterialIcons name="logout" size={24} color="black" />
+          <Text style={styles.settingsItemText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -408,5 +471,53 @@ const styles = StyleSheet.create({
     top: Platform.OS === "ios" ? 40 : 25,
     right: 10,
     padding: 10,
+  },
+  settingsButton: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 40 : 25,
+    right: 10,
+    padding: 10,
+  },
+  settingsContainer: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: '#fff',
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: Platform.OS === "ios" ? 60 : 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  settingsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  settingsList: {
+    padding: 16,
+  },
+  settingsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'space-between',
+  },
+  settingsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingsItemMargin: {
+    marginTop: 16,
+  },
+  settingsItemText: {
+    marginLeft: 16,
+    fontSize: 16,
   },
 });

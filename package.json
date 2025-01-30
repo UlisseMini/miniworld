@@ -19,7 +19,7 @@
     "expo-auth-session": "~5.4.0",
     "expo-constants": "~15.4.6",
     "expo-crypto": "~12.8.1",
-    "expo-dev-client": "~3.3.11",
+    "expo-dev-client": "~3.3.12",
     "expo-device": "~5.9.4",
     "expo-image": "~1.10.6",
     "expo-location": "~16.5.5",

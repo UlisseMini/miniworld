@@ -51,9 +51,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Keep your map location up to date so your friends ",
-          "locationWhenInUsePermission": "Allows us to show your friends where you are",
-          "locationAlwaysPermission": "Allows us to show your friends where you are when you're not using the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allows us to always keep your location up to date for your friends to see.",
+          "locationWhenInUsePermission": "Allows us to put your location on the map for your friends to see.",
+          "locationAlwaysPermission": "Allows us to always keep your location up to date for your friends to see.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true

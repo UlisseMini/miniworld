@@ -25,7 +25,7 @@ export type RefreshableState = {
   users?: User[];
 };
 
-export type Page = "loading" | "login" | "request_location" | "map";
+export type Page = "loading" | "login" | "request_location" | "map" | "settings";
 
 export type GlobalState = RefreshableState & {
   page: Page;
