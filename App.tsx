@@ -337,6 +337,10 @@ function UserMarker(props: { user: User }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const user = props.user;
 
+  // Get default avatar number based on user id
+  const defaultAvatarNumber = user.name ? parseInt(user.name.charCodeAt(0).toString().slice(-1)) % 5 : 0;
+  const avatarUrl = user.avatar_url || `https://cdn.discordapp.com/embed/avatars/${defaultAvatarNumber}.png`;
+
   return (
     <Marker
       tracksViewChanges={tracksViewChanges}
@@ -346,12 +350,12 @@ function UserMarker(props: { user: User }) {
         .map((g) => g.name)
         .join(", ")}`}
     >
-      {/* Use view because setting borderRadius directly on <Image> didn't work on Android. */}
       <View style={styles.avatarContainer}>
         <Image
           style={styles.avatar}
-          source={user.avatar_url}
+          source={avatarUrl}
           onLoadEnd={() => setTracksViewChanges(false)}
+          contentFit="cover"
         />
       </View>
     </Marker>
@@ -424,11 +428,16 @@ function SettingsPage(props: GlobalProps) {
               <View style={styles.settingsItemLeft}>
                 {guild.icon ? (
                   <Image
-                    source={guild.icon}
+                    source={`https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`}
                     style={styles.guildIcon}
+                    contentFit="cover"
                   />
                 ) : (
-                  <MaterialIcons name="group" size={24} color="black" />
+                  <View style={[styles.guildIcon, styles.defaultGuildIcon]}>
+                    <Text style={styles.defaultGuildText}>
+                      {guild.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
                 )}
                 <Text style={styles.settingsItemText}>{guild.name}</Text>
               </View>
@@ -580,5 +589,15 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+  },
+  defaultGuildIcon: {
+    backgroundColor: '#7289da',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  defaultGuildText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
