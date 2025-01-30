@@ -76,6 +76,7 @@ class LocatedUser(BaseModel):
     location: Location
     # Guilds in common with the current user
     common_guilds: List[GuildInfo] = []
+    duser: "DiscordUser"
 
 
 class DiscordUser(BaseModel):
@@ -235,16 +236,13 @@ def update(location: Location, id: UserID = Depends(get_user_id)):
 def get_users(user: UserData = Depends(get_user)) -> List[LocatedUser]:
     "Return all users, with closest first ([0] is always the current user)"
 
-    # return the users with guilds in common. make sure to use
-    # settings.guilds because we only want to use guilds that are in SUPPORTED_SERVERS,
-    # and settings.guilds is automatically filtered like that. this is a bit scuffed.
     located_users = [
         LocatedUser(
             name=u.duser.username,
-            # TODO (low priority) get the actual default-avatar they have.
             avatar_url=u.duser.avatar_url or "https://cdn.discordapp.com/embed/avatars/0.png",
             location=u.location,
             common_guilds=[g for g in u.duser.guilds if g.id in user.settings.guild_ids],
+            duser=u.duser,
         )
         for u in db.users.values()
         if u.location is not None

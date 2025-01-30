@@ -364,8 +364,43 @@ function UserMarker(props: { user: User }) {
 
 function SettingsPage(props: GlobalProps) {
   const [autoUpdate, setAutoUpdate] = useState(true);
-  const currentUser = props.state.users?.[0];  // Current user is always first
-  const guilds = currentUser?.common_guilds || [];
+  const currentUser = props.state.users?.[0];
+  const guilds = currentUser?.duser?.guilds || [];
+  const [enabledGuilds, setEnabledGuilds] = useState<Set<string>>(
+    new Set(currentUser?.common_guilds.map(g => g.id) || [])
+  );
+
+  // Update enabled guilds when user data changes
+  useEffect(() => {
+    if (currentUser?.common_guilds) {
+      setEnabledGuilds(new Set(currentUser.common_guilds.map(g => g.id)));
+    }
+  }, [currentUser?.common_guilds]);
+
+  const toggleGuild = async (guildId: string) => {
+    const newEnabledGuilds = new Set(enabledGuilds);
+    if (enabledGuilds.has(guildId)) {
+      newEnabledGuilds.delete(guildId);
+    } else {
+      newEnabledGuilds.add(guildId);
+    }
+    setEnabledGuilds(newEnabledGuilds);
+
+    // Update server
+    try {
+      await axios.post(`${HOST}/settings`, {
+        guild_ids: Array.from(newEnabledGuilds)
+      }, {
+        headers: {
+          Authorization: props.state.session
+        }
+      });
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+      // Revert on failure
+      setEnabledGuilds(new Set(currentUser?.common_guilds.map(g => g.id) || []));
+    }
+  };
 
   // Load initial state
   useEffect(() => {
@@ -419,7 +454,7 @@ function SettingsPage(props: GlobalProps) {
           <Text style={styles.settingsSectionTitle}>Share Location With</Text>
           {guilds.map((guild, index) => (
             <View
-              key={guild.name}
+              key={guild.id}
               style={[
                 styles.settingsItem,
                 index > 0 && styles.settingsItemMargin
@@ -442,8 +477,8 @@ function SettingsPage(props: GlobalProps) {
                 <Text style={styles.settingsItemText}>{guild.name}</Text>
               </View>
               <Switch
-                value={true}
-                onValueChange={() => { }}
+                value={enabledGuilds.has(guild.id)}
+                onValueChange={() => toggleGuild(guild.id)}
               />
             </View>
           ))}
